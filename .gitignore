@@ -1,0 +1,53 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# --- Virtual environments ---
+.venv/
+venv/
+env/
+.conda/
+
+# --- Environment / secrets ---
+.env
+.env.*
+
+# --- Jupyter ---
+.ipynb_checkpoints/
+
+# --- Datasets & model caches ---
+# Keep the folder structure (README.md placeholders) but ignore downloaded
+# contents under data/, plus any local Hugging Face cache dirs.
+data/raw/**
+data/processed/**
+data/samples/**
+!data/**/README.md
+!data/README.md
+
+.cache/
+huggingface/
+*.lock
+
+# --- Large model / weight files ---
+*.bin
+*.safetensors
+*.ckpt
+*.pt
+*.pth
+*.h5
+*.onnx
+*.pkl
+
+# --- Large media / audio (raw ATC recordings) ---
+*.wav
+*.flac
+*.mp3
+
+# --- OS / editor cruft ---
+.DS_Store
+Thumbs.db
+.vscode/
