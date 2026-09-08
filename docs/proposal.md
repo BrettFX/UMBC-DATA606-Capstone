@@ -5,8 +5,8 @@
 | **Author** | Brett Allen |
 | **GitHub Repository** | https://github.com/BrettFX/UMBC-DATA606-Capstone |
 | **LinkedIn** | https://linkedin.com/in/brett-allen-586ba4121 |
-| **PowerPoint Presentation** | *To be added* |
-| **YouTube Presentation** | https://www.youtube.com/@brettallen2199 |
+| **PowerPoint Presentation** | *TBD* |
+| **YouTube Channel** | https://www.youtube.com/@brettallen2199 |
 
 ---
 
@@ -55,7 +55,15 @@ Natural language processing techniques may provide an additional layer of analys
 
 This project will investigate the following research questions.
 
-### Research Question 1: Automatic Speech Recognition
+**Scope note (post-EDA):** The original proposal sketch included a fourth research question on
+readback-consistency analysis (matching pilot readbacks against controller instructions). It has
+been dropped rather than kept as a fallback: it depended on associating controller/pilot turns
+within a conversation, and neither ATCO2-ASR nor ATCOSIM's utterance-level schema provides that
+turn-level structure, so it would have required scope well beyond a 15-week course. Research
+Question 2 has also been narrowed below, since the EDA confirmed neither dataset provides
+token-level entity annotations to train or evaluate against.
+
+### Research Question 1: Automatic Speech Recognition (ASR)
 
 **How accurately can general-purpose and aviation-domain-adapted speech recognition models transcribe air traffic control communications?**
 
@@ -72,6 +80,13 @@ Potential evaluation measures include:
 ### Research Question 2: Aviation Information Extraction
 
 **Can natural language processing techniques reliably identify operational aviation information from ATC transcripts?**
+
+**Scope:** treated as a secondary objective. Neither ATCO2-ASR's `info` field nor ATCOSIM's
+schema provides token-level entity labels (callsign spans, command spans, etc.) inside a
+transcript, only recording-level context for ATCO2-ASR. Training or evaluating extraction
+therefore starts from a rule-based/pattern baseline (e.g., regex over standardized ATC
+phraseology) plus a small, manually annotated evaluation subset, rather than full supervised
+training on existing labels.
 
 Potential information categories include:
 
@@ -97,53 +112,43 @@ Potential evaluation measures include:
 
 **What acoustic and linguistic characteristics of ATC transmissions are associated with speech-recognition performance?**
 
-Potential characteristics include:
+**Core characteristics** (already implemented by `DataIngestPipeline`, confirmed populated for
+every row in the EDA):
 
-- Transmission duration
-- Signal-to-Noise Ratio (SNR)
-- Speech rate
-- Word count
-- Number of commands
-- Number of numeric values
-- Number of aviation entities
-- Speaker role
-- Audio energy
-- Silence percentage
+- Transmission duration (`duration_sec`)
+- Word count (`word_count`) and character count (`character_count`)
+- Speech rate (`speech_rate_wpm`)
+- Dataset source (`dataset_source`): real (ATCO2-ASR) vs. simulated (ATCOSIM)
+
+**Stretch characteristics** (require work not yet built; pursued only if time allows after the
+core ASR work): Signal-to-Noise Ratio, RMS energy, silence percentage, and number of
+commands/numeric values/aviation entities per utterance, the last three depend on Research
+Question 2's extraction output. `speaker_role` is not pursued at all: it's absent from both
+source schemas (see Section 3, ATCO2-ASR Data Dictionary).
 
 Potential relationships to investigate include:
 
-- WER vs. SNR
 - WER vs. transmission duration
 - WER vs. speech rate
-- WER vs. number of commands
-- Aviation-entity error rate vs. audio quality
-
----
-
-### Research Question 4: Readback Analysis
-
-**Can structured representations of controller instructions and pilot readbacks be used to identify potentially inconsistent readbacks?**
-
-Potential discrepancies may include:
-
-- Altitude mismatches
-- Heading mismatches
-- Frequency mismatches
-- Speed mismatches
-- Runway mismatches
-
-This research question will be treated as a secondary objective and will depend on whether the available datasets contain sufficient information to reliably associate controller instructions with pilot responses.
+- WER vs. dataset source (confirming the per-source evaluation split called for in the EDA's
+  Implications for the Modeling Plan)
+- (Stretch) WER vs. SNR; aviation-entity error rate vs. audio quality
 
 ---
 
 # 3. Data
 
-Two aviation speech datasets are currently planned for this research:
+Two aviation speech datasets were acquired, joined, and inspected for this research. The full
+data-ingestion pipeline, data-quality checks, and exploratory analysis are documented in
+[notebooks/allen_data_606_proposal_eda.ipynb](../notebooks/allen_data_606_proposal_eda.ipynb).
 
-1. **ATCO2**
-2. **ATCOSIM**
+1. **ATCO2-ASR** (real ATC communications)
+2. **ATCOSIM** (simulated ATC communications)
 
-The datasets will be inspected and analyzed in a Jupyter Notebook before the final values in this section are completed.
+Combined, the two datasets provide **10,118 utterances** (8,092 train / 2,026 validation) and
+**~11.55 hours** of ATC audio. `DataIngestPipeline` (`src/data_ingest_pipeline.py`) joins them,
+resamples all audio to a common 16kHz sample rate, and derives the utterance-level metadata used
+throughout this section.
 
 ---
 
@@ -157,75 +162,77 @@ Source:
 
 https://www.atco2.org/
 
+Accessed via the Hugging Face mirror
+[`jlvdoorn/atco2-asr`](https://huggingface.co/datasets/jlvdoorn/atco2-asr), a 559-utterance
+subset of the larger ATCO2 corpus (the full corpus is gated behind an ELRA license). See
+[data/README.md](../data/README.md) for the licensing/redistribution notes established during
+data ingestion.
+
 ### Dataset Description
 
-ATCO2 is an air traffic control speech corpus developed to support machine learning research involving ATC radio communications.
+ATCO2-ASR is a real air-traffic-control speech corpus: audio recorded from live ATC
+communications, paired with ground-truth transcripts and recording-level metadata (airport,
+position, published waypoints, and observed callsigns/airlines).
 
-The dataset contains ATC audio and associated annotations that may support tasks such as:
-
-- Automatic speech recognition
-- Callsign recognition
-- Command recognition
-- Aviation entity extraction
-- Speaker-role analysis
-
-ATCO2 is expected to serve as the primary dataset for this project because its aviation-specific audio and annotations closely align with the project's research questions.
+Because it's real (not simulated) audio, ATCO2-ASR is expected to serve as the harder,
+higher-value evaluation target for this project, closer to the noisy, accented, overlapping
+speech the research questions care about, even though it's the smaller of the two datasets.
 
 ---
 
 ### Data Size and Shape
 
-The exact dataset characteristics will be calculated after acquisition and inspection.
-
 | Characteristic | Value |
 | --- | --- |
-| Size on disk | TBD |
-| Number of rows / utterances | TBD |
-| Number of columns | TBD |
-| Number of audio files | TBD |
-| Total audio duration | TBD |
-| Audio format | TBD |
-| Sample rate | TBD |
+| Size on disk | ~126 MB |
+| Number of rows / utterances | 559 (446 train / 113 validation) |
+| Number of columns | 3 raw on Hugging Face (`audio`, `text`, `info`); 12 total after `DataIngestPipeline` adds 9 derived columns |
+| Number of audio files | 559 |
+| Total audio duration | ~1.10 hours (mean 7.06s per utterance, std 3.93s, range 1.86-32.77s) |
+| Audio format | WAV, mono |
+| Sample rate | 16,000 Hz (native; matches this project's target rate) |
 
 ---
 
 ### Time Period
 
-**TBD**
-
-If the dataset documentation does not provide a meaningful time range for the recordings, this will be documented as **not applicable / not provided** rather than estimated.
+Not provided as an explicit field. ATCO2-ASR audio filenames do embed a recording date/time
+(e.g., `LKPR_RUZYNE_Radar_120_520MHz_20201025_091112.wav` → 2020-10-25), so an approximate range
+could be derived from `audio_path` in future work; this wasn't computed as part of the current
+EDA pass, so it's documented as **not applicable / not provided** rather than estimated.
 
 ---
 
 ### Unit of Observation
 
-The expected unit of observation is:
-
-> **One ATC transmission or utterance and its associated transcript, audio, and metadata.**
-> 
-
-The exact unit will be confirmed after the dataset schema is inspected.
+**One ATC utterance**: a 16kHz mono audio clip and its ground-truth transcript, plus (ATCO2-ASR
+only) recording-level `info` metadata: airport ICAO code and name, position (e.g., Radar/Tower),
+published waypoints, and the callsigns/airlines observed in that recording. The corpus spans 7
+airports (including Prague/LKPR and Sydney/YSSY, confirmed by inspection; the remaining 5 are
+identified only by ICAO code: LSGS, LSZB, LSZH, LZIB, LKTB).
 
 ---
 
 ### Data Dictionary
 
-The final data dictionary will be generated after loading the ATCO2 data.
+Confirmed from the actual `jlvdoorn/atco2-asr` schema and `DataIngestPipeline`'s derived columns
+(see [notebooks/allen_data_606_proposal_eda.ipynb](../notebooks/allen_data_606_proposal_eda.ipynb)):
 
-Expected fields may include the following:
-
-| Column | Data Type | Definition | Potential Values |
+| Column | Data Type | Definition | Observed Values |
 | --- | --- | --- | --- |
-| `utterance_id` | String / Categorical | Unique identifier for an ATC transmission | Unique ID |
-| `audio` / `audio_path` | Audio / String | Audio recording or path to recording | Audio file |
-| `transcript` | String | Ground-truth transcription of the transmission | Free text |
-| `speaker_role` | Categorical | Role of the speaker if available | Controller, pilot, other |
-| `callsign` | String / Categorical | Aircraft callsign if annotated | Aircraft identifier |
-| `command` | String / Categorical | ATC command if annotated | Climb, descend, turn, contact, etc. |
-| `value` | String / Numeric | Operational value associated with a command | Altitude, heading, frequency, etc. |
-| `duration` | Numeric | Length of the transmission | Seconds |
+| `audio` | Audio, 16kHz mono | Raw waveform, decoded on access | duration 1.86-32.77s |
+| `text` | String | Ground-truth transcript | e.g. "Ryanair Seven Three Alpha Hotel turn left heading three six zero" |
+| `info` | String | Recording-level metadata (airport, position, waypoints, callsigns, airlines) | populated for all 559 rows |
+| `utterance_id` | String | Reproducible ID assigned by `DataIngestPipeline` | e.g. `atco2-asr-train-000000` |
+| `duration_sec` | Float | Clip length in seconds | mean 7.06, std 3.93 |
+| `word_count` | Int | Transcript word count | mean 19.1, std 10.3, max 88 |
+| `character_count` | Int | Transcript character count | mean 110.7, std 61.1 |
+| `speech_rate_wpm` | Float | `word_count / (duration_sec / 60)` | mean 168.4 wpm, std 36.0 |
 
-**Note:** This table is preliminary. Column names and definitions will be replaced with the actual ATCO2 schema after the dataset is acquired.
+**Not available:** `speaker_role`, per-token `callsign`/`command`/`value` annotations. Neither
+the raw schema nor `info` provides token-level labels, only recording-level context, so aviation
+entity extraction (Research Question 2) has no ready-made ground truth to train or evaluate
+against; see the scope note under Research Question 2.
 
 ---
 
@@ -243,69 +250,65 @@ https://huggingface.co/datasets/Jzuluaga/atcosim_corpus
 
 ATCOSIM is an aviation speech corpus containing simulated ATC communications produced by professional air traffic controllers.
 
-The corpus contains speech recordings and corresponding transcripts and may provide an additional source of aviation-domain audio for:
+The corpus contains speech recordings and corresponding transcripts and provides a much larger
+source of aviation-domain audio, useful for:
 
-- ASR model evaluation
 - ASR model training or fine-tuning
-- Acoustic analysis
-- Cross-dataset model comparison
+- ASR model evaluation on clean, uniformly-phrased speech
+- Cross-dataset model comparison against real ATCO2-ASR audio
 
-ATCOSIM is expected to serve as a secondary dataset complementing ATCO2.
+Accessed via the Hugging Face mirror
+[`jlvdoorn/atcosim`](https://huggingface.co/datasets/jlvdoorn/atcosim). ATCOSIM serves as the
+primary training-volume dataset for this project (94.5% of combined rows, 90.5% of combined
+audio hours); ATCO2-ASR remains the harder, real-audio evaluation target.
 
 ---
 
 ### Data Size and Shape
 
-The exact dataset characteristics will be calculated after acquisition and inspection.
-
 | Characteristic | Value |
 | --- | --- |
-| Size on disk | TBD |
-| Number of rows / utterances | TBD |
-| Number of columns | TBD |
-| Number of audio files | TBD |
-| Total audio duration | TBD |
-| Audio format | TBD |
-| Number of speakers | TBD |
+| Size on disk | ~2.4 GB |
+| Number of rows / utterances | 9,559 (7,646 train / 1,913 validation) |
+| Number of columns | 2 raw on Hugging Face (`audio`, `text`); 12 total after `DataIngestPipeline` backfills a null `info` column (for schema parity with ATCO2-ASR) and adds 9 derived columns |
+| Number of audio files | 9,559 |
+| Total audio duration | ~10.46 hours (mean 3.94s per utterance, std 1.51s, range 0.14-38.88s) |
+| Audio format | WAV, mono |
+| Number of speakers | Not provided; `jlvdoorn/atcosim` has no speaker-identifier column |
 
 ---
 
 ### Time Period
 
-**TBD / Not applicable**
-
-The appropriate value will be determined after reviewing the corpus metadata.
+**Not applicable.** No recording dates are provided, and filenames (e.g., `gf1_01_001.wav`) use
+a generic recording/session naming convention with no embedded date, unlike ATCO2-ASR's.
 
 ---
 
 ### Unit of Observation
 
-The expected unit of observation is:
-
-> **One simulated ATC speech utterance and its associated transcript and metadata.**
-> 
-
-This will be confirmed after inspecting the dataset.
+**One simulated ATC utterance**: a 32kHz mono audio clip (resampled to 16kHz by
+`DataIngestPipeline`) and its ground-truth transcript. No recording-level metadata (no airport,
+speaker, or session identifier) is provided beyond audio and transcript.
 
 ---
 
 ### Data Dictionary
 
-The final data dictionary will use the actual ATCOSIM schema.
+Confirmed from the actual `jlvdoorn/atcosim` schema and `DataIngestPipeline`'s derived columns:
 
-Expected fields may include:
-
-| Column | Data Type | Definition | Potential Values |
+| Column | Data Type | Definition | Observed Values |
 | --- | --- | --- | --- |
-| `utterance_id` | String / Categorical | Unique speech-record identifier | Unique ID |
-| `audio` / `audio_path` | Audio / String | Speech recording or audio-file location | Audio file |
-| `transcript` | String | Ground-truth transcription | Free text |
-| `speaker_id` | Categorical | Identifier for the speaker | Speaker identifier |
-| `duration` | Numeric | Length of the utterance | Seconds |
-| `sample_rate` | Numeric | Audio sampling frequency | Hz |
-| `metadata` | Mixed | Additional recording information | Dataset dependent |
+| `audio` | Audio, 32kHz mono (native) | Raw waveform; resampled to 16kHz during ingestion | duration 0.14-38.88s |
+| `text` | String | Ground-truth transcript | e.g. "contact geneva one two eight decimal one five good bye" |
+| `utterance_id` | String | Reproducible ID assigned by `DataIngestPipeline` | e.g. `atcosim-train-000000` |
+| `duration_sec` | Float | Clip length in seconds, post-resample | mean 3.94, std 1.51 |
+| `word_count` | Int | Transcript word count | mean 11.3, std 4.2, max 71 |
+| `character_count` | Int | Transcript character count | mean 64.7, std 23.9 |
+| `speech_rate_wpm` | Float | `word_count / (duration_sec / 60)` | mean 174.4 wpm, std 37.9 |
 
-**Note:** This table is preliminary and will be replaced with the actual dataset columns after acquisition.
+**Not available:** `speaker_id`, `info`/session metadata originally anticipated in the earlier
+draft of this dictionary. The Hugging Face mirror used provides only audio + transcript.
 
 ---
 
@@ -330,7 +333,10 @@ Conceptually:
 
 ### Aviation Information Extraction
 
-For the information-extraction task, the target labels will be aviation entity annotations when available.
+Neither dataset provides ready-made entity annotations (see Research Question 2's scope note),
+so target labels will be derived rather than taken directly from the source data: an initial
+rule-based/pattern pass over transcripts, refined against a small manually annotated evaluation
+subset.
 
 Potential target labels include:
 
@@ -347,21 +353,6 @@ Conceptually:
 
 > **Transcript → Aviation Entity Labels**
 > 
-
-The exact target structure will depend on the annotations available in the acquired datasets.
-
----
-
-### Readback Analysis
-
-If controller/pilot exchange analysis is feasible, an additional derived target may represent whether an operational value in a pilot readback is consistent with the preceding controller instruction.
-
-Potential values could include:
-
-- Consistent
-- Possible discrepancy
-
-This target would be derived later in the project rather than taken directly from the source datasets.
 
 ---
 
@@ -404,19 +395,12 @@ Transformer-based NLP models may generate learned contextual representations dir
 
 ### Model-Performance Analysis Features
 
-The following variables may also be created to investigate Research Question 3:
+Matches Research Question 3's core/stretch split above:
 
-- Transmission duration
-- Word count
-- Speech rate
-- Signal-to-Noise Ratio
-- RMS energy
-- Silence percentage
-- Number of commands
-- Number of numeric values
-- Number of aviation entities
-- Speaker role
-- Dataset source
+- **Core (implemented):** transmission duration, word count, character count, speech rate,
+  dataset source
+- **Stretch (not yet implemented):** Signal-to-Noise Ratio, RMS energy, silence percentage,
+  number of commands/numeric values/aviation entities, speaker role
 
 These variables can be compared with model performance measurements such as Word Error Rate to investigate which communication characteristics are associated with higher or lower transcription accuracy.
 
@@ -424,9 +408,12 @@ These variables can be compared with model performance measurements such as Word
 
 ## 3.5 Dataset Integration
 
-The datasets will initially be preserved separately so their original structures and metadata remain intact.
+The two datasets were preserved separately through ingestion (`_load`, `_standardize_schema`) so
+each source's original structure and metadata stayed intact, then joined
+(`concatenate_datasets`) into one combined `DatasetDict` once their schemas were aligned.
 
-During data preparation, a standardized utterance-level analytical dataset may be created with a common structure similar to:
+`DataIngestPipeline` produces a standardized utterance-level analytical table
+(`utterance_df`, 10,118 rows) with this structure:
 
 | Column | Description |
 | --- | --- |
@@ -448,8 +435,6 @@ During data preparation, a standardized utterance-level analytical dataset may b
 (`src/data_ingest_pipeline.py`) already implements `utterance_id`, `dataset_source`,
 `original_split`, `audio_path`, `transcript`, `duration_sec`, `sample_rate`, `word_count`,
 `character_count`, `speech_rate_wpm`, and `info` (ATCO2-ASR only). `speaker_role`,
-`callsign_count`, `command_count`, `numeric_count`, and `entity_count` remain future work,
-pending speaker-role labeling and the NLP entity-extraction work described under Research
-Questions 2 and 4.
-
-The final set of columns will be determined by the actual attributes available in the two source datasets.
+`callsign_count`, `command_count`, `numeric_count`, and `entity_count` remain stretch goals,
+pending the rule-based/weakly-supervised entity-extraction work described under Research
+Question 2, and are not part of the core deliverable for this course.
