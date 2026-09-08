@@ -55,7 +55,7 @@ Natural language processing techniques may provide an additional layer of analys
 
 This project will investigate the following research questions.
 
-### Research Question 1 — Automatic Speech Recognition
+### Research Question 1: Automatic Speech Recognition
 
 **How accurately can general-purpose and aviation-domain-adapted speech recognition models transcribe air traffic control communications?**
 
@@ -69,7 +69,7 @@ Potential evaluation measures include:
 
 ---
 
-### Research Question 2 — Aviation Information Extraction
+### Research Question 2: Aviation Information Extraction
 
 **Can natural language processing techniques reliably identify operational aviation information from ATC transcripts?**
 
@@ -93,7 +93,7 @@ Potential evaluation measures include:
 
 ---
 
-### Research Question 3 — Communication Characteristics and Model Performance
+### Research Question 3: Communication Characteristics and Model Performance
 
 **What acoustic and linguistic characteristics of ATC transmissions are associated with speech-recognition performance?**
 
@@ -120,7 +120,7 @@ Potential relationships to investigate include:
 
 ---
 
-### Research Question 4 — Readback Analysis
+### Research Question 4: Readback Analysis
 
 **Can structured representations of controller instructions and pilot readbacks be used to identify potentially inconsistent readbacks?**
 
@@ -151,7 +151,7 @@ The datasets will be inspected and analyzed in a Jupyter Notebook before the fin
 
 ### Data Source
 
-**ATCO2 — Air Traffic Control Automatic Speech Recognition Dataset**
+**ATCO2: Air Traffic Control Automatic Speech Recognition Dataset**
 
 Source:
 
@@ -233,7 +233,7 @@ Expected fields may include the following:
 
 ### Data Source
 
-**ATCOSIM — Air Traffic Control Simulation Speech Corpus**
+**ATCOSIM: Air Traffic Control Simulation Speech Corpus**
 
 Source:
 
@@ -443,5 +443,13 @@ During data preparation, a standardized utterance-level analytical dataset may b
 | `command_count` | Number of commands |
 | `numeric_count` | Number of numeric values |
 | `entity_count` | Number of aviation entities |
+
+**Implementation status (Proposal EDA notebook):** `DataIngestPipeline`
+(`src/data_ingest_pipeline.py`) already implements `utterance_id`, `dataset_source`,
+`original_split`, `audio_path`, `transcript`, `duration_sec`, `sample_rate`, `word_count`,
+`character_count`, `speech_rate_wpm`, and `info` (ATCO2-ASR only). `speaker_role`,
+`callsign_count`, `command_count`, `numeric_count`, and `entity_count` remain future work,
+pending speaker-role labeling and the NLP entity-extraction work described under Research
+Questions 2 and 4.
 
 The final set of columns will be determined by the actual attributes available in the two source datasets.

@@ -25,7 +25,7 @@ Each subfolder keeps a `README.md` placeholder so the empty directory structure 
 | Dataset | HF repo | Upstream / original source | Rows | Size |
 |---|---|---|---|---|
 | ATCO2-ASR | [jlvdoorn/atco2-asr](https://huggingface.co/datasets/jlvdoorn/atco2-asr) | [ATCO2 project](https://www.atco2.org/data) ([GitHub](https://github.com/idiap/atco2-corpus)), featuring real, recorded ATC communications | 559 (446 train / 113 validation) | ~126 MB |
-| ATCOSIM | [jlvdoorn/atcosim](https://huggingface.co/datasets/jlvdoorn/atcosim) | [ATCOSIM project](https://www.spsc.tugraz.at/databases-and-tools/atcosim-air-traffic-control-simulation-speech-corpus.html), TU Graz SPSC lab, featuring simulated ATC communications | 9,559 (7,650 train / 1,909 validation) | ~2.4 GB |
+| ATCOSIM | [jlvdoorn/atcosim](https://huggingface.co/datasets/jlvdoorn/atcosim) | [ATCOSIM project](https://www.spsc.tugraz.at/databases-and-tools/atcosim-air-traffic-control-simulation-speech-corpus.html), TU Graz SPSC lab, featuring simulated ATC communications | 9,559 (7,646 train / 1,913 validation) | ~2.4 GB |
 
 Both HF datasets ship as audio (`audio`) + transcription (`text`) pairs in Parquet format,
 English only. ATCO2-ASR additionally includes an `info` field with metadata about active
