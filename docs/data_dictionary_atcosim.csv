@@ -1,0 +1,14 @@
+column,dtype,definition,observed_value
+audio,Audio (array + sampling_rate + path),"Raw waveform, decoded on access","path='gf1_01_001.wav', sampling_rate=16000, array=<~46,978 samples>"
+utterance_id,String,Reproducible ID assigned by DataIngestPipeline,atcosim-train-000000
+original_split,String,"Split (train/validation) within the row's own source dataset, before joining",train
+audio_path,String,Original audio filename,gf1_01_001.wav
+transcript,String,Ground-truth transcript (renamed from the raw `text` column), contact geneva one two eight decimal one five good bye 
+duration_sec,Float,Clip length in seconds,2.94
+sample_rate,Int,"Audio sampling frequency (Hz), after resampling to a common rate",16000
+word_count,Int,Transcript word count,10
+character_count,Int,Transcript character count,56
+speech_rate_wpm,Float,word_count / (duration_sec / 60),204.35
+info,String,"Recording-level metadata: airport ICAO/name, position, waypoints, callsigns/airlines (ATCO2-ASR only)",N/A
+recorded_at,String,Recording date/time parsed from audio_path (ATCO2-ASR only),N/A
+dataset_split,String,Split the row landed in after joining (identical to original_split today),train

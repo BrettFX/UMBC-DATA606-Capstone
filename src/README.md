@@ -7,7 +7,8 @@ Reusable project code, importable from notebooks via `sys.path.append("../src")`
 `DataIngestPipeline` loads the ATCO2-ASR and ATCOSIM datasets from Hugging Face, tags each
 row with `dataset_source`/`original_split`/a reproducible `utterance_id`, aligns their schemas,
 resamples all audio to a common sample rate, and derives per-utterance metadata
-(`duration_sec`, `sample_rate`, `word_count`, `character_count`, `speech_rate_wpm`). Used from
+(`duration_sec`, `sample_rate`, `word_count`, `character_count`, `speech_rate_wpm`,
+`recorded_at` for ATCO2-ASR only, parsed from its filenames). Used from
 [notebooks/allen_data_606_proposal_eda.ipynb](../notebooks/allen_data_606_proposal_eda.ipynb),
 and intended to be reused by model-training code later so ingestion logic isn't duplicated.
 

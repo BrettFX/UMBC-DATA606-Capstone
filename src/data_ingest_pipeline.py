@@ -14,7 +14,9 @@ Example:
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, Optional
 
@@ -31,6 +33,28 @@ DEFAULT_SOURCES = {
 # ASR-standard sample rate (also ATCO2-ASR's native rate; Whisper/Wav2Vec2
 # and most pretrained speech models expect 16kHz mono input).
 DEFAULT_TARGET_SAMPLE_RATE = 16_000
+
+# ATCO2-ASR filenames embed a recording date/time, e.g.
+# `LKPR_RUZYNE_Radar_120_520MHz_20201025_091112.wav`. ATCOSIM's generic
+# session-based filenames (e.g. `gf1_01_001.wav`) don't match this pattern.
+_RECORDING_TIMESTAMP_RE = re.compile(r"(\d{8})_(\d{6})")
+
+
+def _parse_recorded_at(audio_path: Optional[str]) -> Optional[str]:
+    """Parse a `YYYYMMDD_HHMMSS` timestamp out of an audio filename, if present.
+
+    Returns an ISO-8601 string (e.g. `"2020-10-25T09:09:15"`) for ATCO2-ASR
+    rows, or `None` for rows (e.g. ATCOSIM's) whose filename doesn't embed one.
+    """
+    if not audio_path:
+        return None
+    match = _RECORDING_TIMESTAMP_RE.search(audio_path)
+    if not match:
+        return None
+    try:
+        return datetime.strptime(match.group(0), "%Y%m%d_%H%M%S").isoformat()
+    except ValueError:
+        return None
 
 
 @dataclass
@@ -197,8 +221,8 @@ class DataIngestPipeline:
 
     def _add_utterance_metadata(self, combined: DatasetDict) -> DatasetDict:
         """Derive `audio_path`, `duration_sec`, `sample_rate`, `word_count`,
-        `character_count`, and `speech_rate_wpm` from each row's
-        (now-resampled) audio + text.
+        `character_count`, `speech_rate_wpm`, and `recorded_at` from each
+        row's (now-resampled) audio + text.
 
         This is the step that actually triggers audio decode/resample, so
         it's the expensive part of the pipeline, batched and, if
@@ -207,7 +231,7 @@ class DataIngestPipeline:
 
         def _derive(batch):
             audio_paths, durations, sample_rates = [], [], []
-            word_counts, char_counts, speech_rates = [], [], []
+            word_counts, char_counts, speech_rates, recorded_ats = [], [], [], []
             for audio, text in zip(batch["audio"], batch["text"]):
                 audio_paths.append(audio["path"])
                 sample_rates.append(audio["sampling_rate"])
@@ -220,6 +244,7 @@ class DataIngestPipeline:
                 # Words per minute; guards against a divide-by-zero on a
                 # (currently nonexistent, see Data Quality Checks) zero-duration row.
                 speech_rates.append(word_count / (duration / 60) if duration > 0 else float("nan"))
+                recorded_ats.append(_parse_recorded_at(audio["path"]))
             return {
                 "audio_path": audio_paths,
                 "duration_sec": durations,
@@ -227,11 +252,21 @@ class DataIngestPipeline:
                 "word_count": word_counts,
                 "character_count": char_counts,
                 "speech_rate_wpm": speech_rates,
+                "recorded_at": recorded_ats,
             }
 
         for split_name in combined:
             combined[split_name] = combined[split_name].map(
                 _derive, batched=True, num_proc=self.num_proc
+            )
+            # `recorded_at` is all-None for entire batches of ATCOSIM rows;
+            # without an explicit cast, Arrow can infer a `null` type for
+            # those batches vs. `string` for ATCO2-ASR's, and then choke on
+            # the mismatch when the split's underlying table is finalized
+            # (same failure mode `_standardize_schema` guards against for
+            # the backfilled `info` column).
+            combined[split_name] = combined[split_name].cast_column(
+                "recorded_at", Value("string")
             )
         return combined
 
@@ -261,6 +296,7 @@ class DataIngestPipeline:
             "character_count",
             "speech_rate_wpm",
             "info",
+            "recorded_at",
         ]
         remaining = [c for c in df.columns if c not in column_order]
         return df[[c for c in column_order if c in df.columns] + remaining]

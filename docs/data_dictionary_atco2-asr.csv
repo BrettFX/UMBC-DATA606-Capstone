@@ -1,0 +1,14 @@
+column,dtype,definition,observed_value
+audio,Audio (array + sampling_rate + path),"Raw waveform, decoded on access","path='LKPR_RUZYNE_Radar_120_520MHz_20201025_091112.wav', sampling_rate=16000, array=<~117,760 samples>"
+utterance_id,String,Reproducible ID assigned by DataIngestPipeline,atco2-asr-train-000000
+original_split,String,"Split (train/validation) within the row's own source dataset, before joining",train
+audio_path,String,Original audio filename,LKPR_RUZYNE_Radar_120_520MHz_20201025_091112.wav
+transcript,String,Ground-truth transcript (renamed from the raw `text` column),Oscar Kilo Papa Mike Bravo descend flight level one hundred level one hundred Oscar Kilo Papa Mike …
+duration_sec,Float,Clip length in seconds,7.36
+sample_rate,Int,"Audio sampling frequency (Hz), after resampling to a common rate",16000
+word_count,Int,Transcript word count,18
+character_count,Int,Transcript character count,105
+speech_rate_wpm,Float,word_count / (duration_sec / 60),146.74
+info,String,"Recording-level metadata: airport ICAO/name, position, waypoints, callsigns/airlines (ATCO2-ASR only)",LKPR | Praha Ruzyne | Radar | AKEVA ARVEG BAGRU BAROX BAVIN BEKVI ELMEK ELPON ERASU EVEMI KENOK KUV…
+recorded_at,String,Recording date/time parsed from audio_path (ATCO2-ASR only),2020-10-25T09:11:12
+dataset_split,String,Split the row landed in after joining (identical to original_split today),train
