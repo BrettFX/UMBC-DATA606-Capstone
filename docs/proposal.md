@@ -5,7 +5,7 @@
 | **Author** | Brett Allen |
 | **GitHub Repository** | https://github.com/BrettFX/UMBC-DATA606-Capstone |
 | **LinkedIn** | https://linkedin.com/in/brett-allen-586ba4121 |
-| **PowerPoint Presentation** | *TBD* |
+| **PowerPoint Presentation** | [Allen_DATA_606_Capstone_Proposal.pptx](./Allen_DATA_606_Capstone_Proposal.pptx) |
 | **YouTube Channel** | https://www.youtube.com/@brettallen2199 |
 
 ---
