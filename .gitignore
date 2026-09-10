@@ -46,6 +46,9 @@ huggingface/
 *.wav
 *.flac
 *.mp3
+# Deliberate, scoped exception: a handful of short illustrative clips saved by
+# the proposal EDA notebook so they play natively on GitHub (see res/README.md).
+!res/audio_samples/*.wav
 
 # --- OS / editor cruft ---
 .DS_Store
