@@ -124,7 +124,7 @@ Potential relationships to investigate include:
 
 Two aviation speech datasets were acquired, joined, and inspected for this research. The full
 data-ingestion pipeline, data-quality checks, and exploratory analysis are documented in
-[notebooks/allen_data_606_proposal_eda.ipynb](../notebooks/allen_data_606_proposal_eda.ipynb).
+[notebooks/proposal_eda.ipynb](../notebooks/proposal_eda.ipynb).
 
 1. **ATCO2-ASR** (real ATC communications)
 2. **ATCOSIM** (simulated ATC communications)
@@ -207,7 +207,7 @@ Through preliminary EDA, the corpus spans 7 airports: LKPR (Prague), LKTB (Brno)
 ### Data Dictionary
 
 > **NOTE:** Generated directly from `utterance_df` in
-> [notebooks/allen_data_606_proposal_eda.ipynb](../notebooks/allen_data_606_proposal_eda.ipynb)
+> [notebooks/proposal_eda.ipynb](../notebooks/proposal_eda.ipynb)
 > and exported to [data_dictionary_atco2-asr.csv](data_dictionary_atco2-asr.csv). "Observed
 > Value" is each column's first non-null example.
 > 
@@ -293,7 +293,7 @@ the `DataIngestPipeline`) and its ground-truth transcript. No recording-level me
 ### Data Dictionary
 
 > **NOTE:** Generated directly from `utterance_df` in
-> [notebooks/allen_data_606_proposal_eda.ipynb](../notebooks/allen_data_606_proposal_eda.ipynb)
+> [notebooks/proposal_eda.ipynb](../notebooks/proposal_eda.ipynb)
 > and exported to [data_dictionary_atcosim.csv](data_dictionary_atcosim.csv). "Observed Value" is
 > each column's first non-null example.
 > 

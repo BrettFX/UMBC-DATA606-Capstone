@@ -35,7 +35,7 @@ aircraft/navigation waypoints.
 
 Datasets are pulled with Hugging Face `datasets.load_dataset`, using `cache_dir` (not `data_dir`!) to
 point the download at the expected local path. See
-[notebooks/allen_data_606_proposal_eda.ipynb](../notebooks/allen_data_606_proposal_eda.ipynb) for
+[notebooks/proposal_eda.ipynb](../notebooks/proposal_eda.ipynb) for
 the working example:
 
 ```python
