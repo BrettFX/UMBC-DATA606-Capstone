@@ -28,6 +28,7 @@ from datasets import Audio, DatasetDict, Value, concatenate_datasets, load_datas
 DEFAULT_SOURCES = {
     "atco2-asr": "jlvdoorn/atco2-asr",
     "atcosim": "jlvdoorn/atcosim",
+    "atc-asr-dataset": "jacktol/ATC-ASR-Dataset"
 }
 
 # ASR-standard sample rate (also ATCO2-ASR's native rate; Whisper/Wav2Vec2
