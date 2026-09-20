@@ -1,3 +1,9 @@
+# SUPERSEDED (docs/report.md, Section 3): this dataset was replaced by
+# jacktol/ATC-ASR-Dataset (see data_dictionary_atc-asr-dataset.csv) because its
+# dataset card reveals it's built in part from the same ATCO2 1-Hour Test
+# Subset this file's source (jlvdoorn/atco2-asr) wraps -- running both risked
+# duplicate/overlapping utterances and train/test leakage. Kept here only as a
+# historical record of the schema this project's earlier proposal-EDA phase used.
 column,dtype,definition,observed_value
 audio,Audio (array + sampling_rate + path),"Raw waveform, decoded on access","path='LKPR_RUZYNE_Radar_120_520MHz_20201025_091112.wav', sampling_rate=16000, array=<~117,760 samples>"
 utterance_id,String,Reproducible ID assigned by DataIngestPipeline,atco2-asr-train-000000

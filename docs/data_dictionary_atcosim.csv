@@ -1,14 +1,28 @@
 column,dtype,definition,observed_value
-audio,Audio (array + sampling_rate + path),"Raw waveform, decoded on access","path='gf1_01_001.wav', sampling_rate=16000, array=<~46,978 samples>"
-utterance_id,String,Reproducible ID assigned by DataIngestPipeline,atcosim-train-000000
-original_split,String,"Split (train/validation) within the row's own source dataset, before joining",train
-audio_path,String,Original audio filename,gf1_01_001.wav
-transcript,String,Ground-truth transcript (renamed from the raw `text` column), contact geneva one two eight decimal one five good bye 
-duration_sec,Float,Clip length in seconds,2.94
-sample_rate,Int,"Audio sampling frequency (Hz), after resampling to a common rate",16000
-word_count,Int,Transcript word count,10
-character_count,Int,Transcript character count,56
-speech_rate_wpm,Float,word_count / (duration_sec / 60),204.35
-info,String,"Recording-level metadata: airport ICAO/name, position, waypoints, callsigns/airlines (ATCO2-ASR only)",N/A
-recorded_at,String,Recording date/time parsed from audio_path (ATCO2-ASR only),N/A
-dataset_split,String,Split the row landed in after joining (identical to original_split today),train
+utterance_id,String,Reproducible id assigned by DataIngestPipeline: '<dataset_source>-<original_split>-<row index>'.,atcosim-train-000620
+dataset_source,String,Which corpus this row came from: 'atcosim' or 'atc-asr-dataset'.,atcosim
+original_split,String,"The split as originally published by the source, before this project's own resplit.",train
+dataset_split,String,This project's own train/validation/test split (see DataIngestPipeline._resplit).,test
+source_id,String,"The publisher's own row id, where available (atc-asr-dataset only; null for atcosim). Not used for joins/dedup -- `utterance_id`/`audio_checksum` are canonical for that.",N/A
+audio_path,String,Original filename of the row's audio clip.,sm1_01_003.wav
+audio_checksum,String,sha1 of the decoded waveform's bytes; canonical audio-identity key for dedup.,be4c96f58aa723bfc9e7aed07e8468dba7a077d6
+audio_decode_error,String,None if the row's audio decoded cleanly; the exception message otherwise.,N/A
+transcript,String,Raw transcript text as published by the source.,p s a eight one zero contact zurich one three three decimal four 
+transcript_normalized,String,"Lowercased, whitespace/punctuation-normalized transcript; canonical text-identity key for dedup.",p s a eight one zero contact zurich one three three decimal four
+duration_sec,Float,"Audio duration in seconds, from the decoded waveform.",4.2298
+sample_rate,Int,Audio sample rate in Hz after resampling (see DataIngestPipeline.target_sample_rate); 0 for a corrupt row.,16000
+word_count,Int,Whitespace-delimited token count of `transcript`.,13
+character_count,Int,Character count of `transcript`.,65
+speech_rate_wpm,Float,word_count / (duration_sec / 60); NaN if duration_sec is non-positive.,184.4053
+numeric_token_count,Int,Count of ATC numeral-word tokens in `transcript_normalized` (see preprocessing.vocab).,8
+command_verb_count,Int,Count of ATC command-verb tokens in `transcript_normalized`; a proxy pending real NER (deferred).,1
+callsign_like_count,Int,Count of callsign-like token runs in `transcript_normalized`; a proxy pending real NER (deferred).,0
+rms_energy,Float,"Mean per-frame RMS amplitude (unitless, waveform in [-1, 1]); loudness proxy.",0.0508
+silence_pct,Float,Percent of the clip librosa.effects.split(top_db=30) marks as below-threshold.,25.8596
+snr_db_proxy,Float,"P95-P10 gap of per-frame RMS-in-dB; a heuristic dynamic-range proxy, NOT a physical SNR measurement -- comparative use only.",39.0185
+zero_crossing_rate,Float,Mean per-frame zero-crossing rate; noisiness/unvoiced-speech proxy.,0.3042
+spectral_centroid_hz,Float,Mean per-frame amplitude-weighted mean frequency (Hz); 'brightness'.,2882.5633
+spectral_bandwidth_hz,Float,Mean per-frame amplitude-weighted frequency spread (Hz).,1639.7587
+recorded_at,String,"ISO-8601 recording timestamp parsed from the filename, where the source's filenames embed one; null otherwise (structural, not missing data -- see DataIngestPipeline._parse_recorded_at).",N/A
+is_repeated_transcript,Boolean,True if `transcript_normalized` recurs across 2+ rows with *different* audio content (expected fixed ATC phraseology; never dropped -- see preprocessing.quality).,True
+repeated_transcript_count,Int,How many rows (post-cleaning) share this row's `transcript_normalized`.,2

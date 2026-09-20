@@ -1,0 +1,28 @@
+column,dtype,definition,observed_value
+utterance_id,String,Reproducible id assigned by DataIngestPipeline: '<dataset_source>-<original_split>-<row index>'.,atc-asr-dataset-test-000000
+dataset_source,String,Which corpus this row came from: 'atcosim' or 'atc-asr-dataset'.,atc-asr-dataset
+original_split,String,"The split as originally published by the source, before this project's own resplit.",test
+dataset_split,String,This project's own train/validation/test split (see DataIngestPipeline._resplit).,test
+source_id,String,"The publisher's own row id, where available (atc-asr-dataset only; null for atcosim). Not used for joins/dedup -- `utterance_id`/`audio_checksum` are canonical for that.",00a81de9d20f87d04465
+audio_path,String,Original filename of the row's audio clip.,00a81de9d20f87d04465.wav
+audio_checksum,String,sha1 of the decoded waveform's bytes; canonical audio-identity key for dedup.,877fd0162c52d8a427190ad99c708c84616e47e1
+audio_decode_error,String,None if the row's audio decoded cleanly; the exception message otherwise.,N/A
+transcript,String,Raw transcript text as published by the source.,HOTEL HOTEL BRAVO THANK YOU
+transcript_normalized,String,"Lowercased, whitespace/punctuation-normalized transcript; canonical text-identity key for dedup.",hotel hotel bravo thank you
+duration_sec,Float,"Audio duration in seconds, from the decoded waveform.",1.51
+sample_rate,Int,Audio sample rate in Hz after resampling (see DataIngestPipeline.target_sample_rate); 0 for a corrupt row.,16000
+word_count,Int,Whitespace-delimited token count of `transcript`.,5
+character_count,Int,Character count of `transcript`.,27
+speech_rate_wpm,Float,word_count / (duration_sec / 60); NaN if duration_sec is non-positive.,198.6755
+numeric_token_count,Int,Count of ATC numeral-word tokens in `transcript_normalized` (see preprocessing.vocab).,0
+command_verb_count,Int,Count of ATC command-verb tokens in `transcript_normalized`; a proxy pending real NER (deferred).,0
+callsign_like_count,Int,Count of callsign-like token runs in `transcript_normalized`; a proxy pending real NER (deferred).,1
+rms_energy,Float,"Mean per-frame RMS amplitude (unitless, waveform in [-1, 1]); loudness proxy.",0.2674
+silence_pct,Float,Percent of the clip librosa.effects.split(top_db=30) marks as below-threshold.,0.0
+snr_db_proxy,Float,"P95-P10 gap of per-frame RMS-in-dB; a heuristic dynamic-range proxy, NOT a physical SNR measurement -- comparative use only.",14.1353
+zero_crossing_rate,Float,Mean per-frame zero-crossing rate; noisiness/unvoiced-speech proxy.,0.0564
+spectral_centroid_hz,Float,Mean per-frame amplitude-weighted mean frequency (Hz); 'brightness'.,1026.304
+spectral_bandwidth_hz,Float,Mean per-frame amplitude-weighted frequency spread (Hz).,1096.3467
+recorded_at,String,"ISO-8601 recording timestamp parsed from the filename, where the source's filenames embed one; null otherwise (structural, not missing data -- see DataIngestPipeline._parse_recorded_at).",N/A
+is_repeated_transcript,Boolean,True if `transcript_normalized` recurs across 2+ rows with *different* audio content (expected fixed ATC phraseology; never dropped -- see preprocessing.quality).,False
+repeated_transcript_count,Int,How many rows (post-cleaning) share this row's `transcript_normalized`.,1
