@@ -1,7 +1,8 @@
 """Data ingestion pipeline for the ATC speech corpora used in this capstone.
 
-Loads the ATCO2-ASR and ATCOSIM datasets from Hugging Face, standardizes them
-onto a common schema, resamples audio to a common sample rate, and derives
+Loads the ATC-ASR-Dataset (real ATC utterances) and ATCOSIM (simulated ATC
+utterances) datasets from Hugging Face, standardizes them onto a common
+schema, resamples audio to a common sample rate, and derives
 the utterance-level metadata (`utterance_id`, `duration_sec`, `word_count`,
 `speech_rate_wpm`, etc.) documented in `docs/proposal.md` section 3.5
 ("Dataset Integration").
@@ -15,18 +16,25 @@ Example:
 from __future__ import annotations
 
 import re
+from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
+import numpy as np
 import pandas as pd
 from datasets import Audio, DatasetDict, Value, concatenate_datasets, load_dataset
 
 # Hugging Face repo IDs, keyed by the short `dataset_source` name used
 # throughout this project.
+#
+# `atc-asr-dataset` replaces `jlvdoorn/atco2-asr` (rather than supplementing
+# it): its dataset card states it's built in part from the "ATCO2 1-Hour Test
+# Subset", the same public release `atco2-asr` wraps, so running both would
+# risk duplicate/overlapping utterances (and possible train/test leakage)
+# between "sources" that are really the same recordings.
 DEFAULT_SOURCES = {
-    "atco2-asr": "jlvdoorn/atco2-asr",
     "atcosim": "jlvdoorn/atcosim",
     "atc-asr-dataset": "jacktol/ATC-ASR-Dataset"
 }
@@ -39,6 +47,20 @@ DEFAULT_TARGET_SAMPLE_RATE = 16_000
 # `LKPR_RUZYNE_Radar_120_520MHz_20201025_091112.wav`. ATCOSIM's generic
 # session-based filenames (e.g. `gf1_01_001.wav`) don't match this pattern.
 _RECORDING_TIMESTAMP_RE = re.compile(r"(\d{8})_(\d{6})")
+
+# ATCOSIM's filenames are `<speaker>_<session>_<utterance>.wav` (e.g.
+# `gf1_01_001.wav`, `gf1_01_002.wav`, ...): utterances sharing a
+# `<speaker>_<session>` prefix are clips from the same recording. Grouping by
+# this key before re-splitting keeps same-session utterances from straddling
+# a split boundary. `atc-asr-dataset`'s row `id`s (e.g. `01d7425638602ab696a4`)
+# are opaque hashes with no recoverable session info, so it isn't re-split at
+# all (see `resplit_sources`/`_resplit`) -- its published train/validation/test
+# split (already ~80/10/10, per its dataset card manually filtered/cleaned) is
+# kept as-is rather than risk reintroducing leakage a random reshuffle can't
+# detect.
+_SESSION_KEY_PATTERNS = {
+    "atcosim": re.compile(r"^(.+)_\d+$"),
+}
 
 
 def _parse_recorded_at(audio_path: Optional[str]) -> Optional[str]:
@@ -70,17 +92,39 @@ class DataIngestPipeline:
         target_sample_rate: Sample rate (Hz) every audio row is resampled to.
         num_proc: Worker processes for the metadata-derivation map step.
             `None` runs single-process.
+        resplit_sources: Sources to re-split into a fresh `train`/
+            `validation`/`test` partition (`test_size`/`val_size` of the
+            source's total each), grouped by recording session so utterances
+            from the same session all land in the same split (see
+            `_SESSION_KEY_PATTERNS`). Sources not listed here keep their
+            originally published split as-is -- do not add a source here
+            without also adding its session-grouping pattern to
+            `_SESSION_KEY_PATTERNS`, or the group-by-session leakage
+            protection this exists for is silently skipped.
+        test_size: Fraction of each `resplit_sources` source assigned to the
+            new `test` split.
+        val_size: Fraction of each `resplit_sources` source assigned to the
+            new `validation` split.
+        split_seed: Seed for the shuffle that assigns session groups to
+            splits in `_resplit`, so re-running `run(force=True)` reproduces
+            the same split.
 
     After `run()`, the original per-source dataset counts (pre-join) are
     available on `source_counts_`, and a per-(dataset_source, original_split)
     row-count summary (used to document class imbalance) is available on
-    `validation_report_`.
+    `validation_report_`. `original_split` in that report is the split as
+    originally published by the source; the row's actual (post-`_resplit`)
+    split is `dataset_split` in `utterance_df`.
     """
 
     data_dir: str = "../data"
     sources: Dict[str, str] = field(default_factory=lambda: dict(DEFAULT_SOURCES))
     target_sample_rate: int = DEFAULT_TARGET_SAMPLE_RATE
     num_proc: Optional[int] = None
+    resplit_sources: tuple[str, ...] = ("atcosim",)
+    test_size: float = 0.1
+    val_size: float = 0.1
+    split_seed: int = 42
 
     source_counts_: Dict[str, Dict[str, int]] = field(default_factory=dict, init=False)
     validation_report_: Optional[pd.DataFrame] = field(default=None, init=False)
@@ -128,6 +172,7 @@ class DataIngestPipeline:
 
         datasets = self._load()
         datasets = self._standardize_schema(datasets)
+        datasets = self._resplit(datasets)
         datasets = self._resample(datasets)
         combined_dataset = self._join(datasets)
         combined_dataset = self._add_utterance_metadata(combined_dataset)
@@ -193,6 +238,98 @@ class DataIngestPipeline:
             standardized[source_name] = tagged
         return standardized
 
+    def _resplit(self, datasets: Dict[str, DatasetDict]) -> Dict[str, DatasetDict]:
+        """Re-split each `resplit_sources` source into a fresh, session-grouped
+        `train`/`validation`/`test` partition; leave every other source's
+        published split untouched.
+
+        Pooling every source's own splits and randomly reshuffling rows
+        (the simplest way to give the combined corpus a `test` split that
+        spans all sources) would risk leaking same-recording-session
+        utterances across the new split boundaries for any source whose rows
+        aren't independent -- exactly the failure mode a published split is
+        usually curated to avoid. So only sources in `resplit_sources` (ones
+        with a recoverable session id, per `_SESSION_KEY_PATTERNS`) are
+        reshuffled; the rest keep whatever split their publisher assigned.
+        """
+        resplit = dict(datasets)
+        for source_name in self.resplit_sources:
+            if source_name not in resplit:
+                continue
+            pattern = _SESSION_KEY_PATTERNS.get(source_name)
+            if pattern is None:
+                raise NotImplementedError(
+                    f"{source_name!r} is in resplit_sources but has no entry in "
+                    "_SESSION_KEY_PATTERNS. Re-splitting it without a session "
+                    "grouping key would risk leaking same-recording utterances "
+                    "across train/validation/test; add a pattern (or remove it "
+                    "from resplit_sources to keep its published split as-is)."
+                )
+            dsd = resplit[source_name]
+            flat = concatenate_datasets([dsd[split_name] for split_name in sorted(dsd.keys())])
+
+            # `decode=False` reads each row's filename without decoding its
+            # audio -- cheap, since it skips the librosa/soundfile resample
+            # `_add_utterance_metadata` later does for real.
+            audio_paths = flat.cast_column("audio", Audio(decode=False))["audio"]
+            groups = [self._session_group(p["path"], pattern) for p in audio_paths]
+
+            assignment = self._group_split(groups, self.test_size, self.val_size, self.split_seed)
+            flat = flat.add_column("_resplit_assignment", assignment)
+            resplit[source_name] = DatasetDict(
+                {
+                    split_name: flat.filter(
+                        lambda row, split_name=split_name: row["_resplit_assignment"] == split_name
+                    ).remove_columns("_resplit_assignment")
+                    for split_name in ("train", "validation", "test")
+                }
+            )
+        return resplit
+
+    @staticmethod
+    def _session_group(audio_path: Optional[str], pattern: re.Pattern) -> str:
+        """Return `audio_path`'s session-grouping key, or `audio_path` itself
+        (i.e. treat it as its own singleton group) if `pattern` doesn't match."""
+        stem = Path(audio_path).stem if audio_path else ""
+        match = pattern.match(stem)
+        return match.group(1) if match else stem
+
+    @staticmethod
+    def _group_split(
+        groups: List[str], test_size: float, val_size: float, seed: int
+    ) -> List[str]:
+        """Assign every row to `train`/`validation`/`test` by its `groups`
+        value, so all rows sharing a group land in the same split.
+
+        Shuffles the unique groups (seeded, for reproducibility) and greedily
+        fills `test` then `validation` up to `test_size`/`val_size` of the
+        total row count, assigning whatever's left to `train`. Exact
+        proportions aren't guaranteed (groups aren't split), but with many
+        small, similarly-sized groups (as ATCOSIM's ~50 recording sessions
+        are) the result lands close to the target split.
+        """
+        group_sizes = Counter(groups)
+        unique_groups = list(group_sizes.keys())
+        np.random.default_rng(seed).shuffle(unique_groups)
+
+        n_total = len(groups)
+        target_test = round(n_total * test_size)
+        target_val = round(n_total * val_size)
+
+        split_by_group = {}
+        n_test = n_val = 0
+        for group in unique_groups:
+            size = group_sizes[group]
+            if n_test < target_test:
+                split_by_group[group] = "test"
+                n_test += size
+            elif n_val < target_val:
+                split_by_group[group] = "validation"
+                n_val += size
+            else:
+                split_by_group[group] = "train"
+        return [split_by_group[group] for group in groups]
+
     def _resample(self, datasets: Dict[str, DatasetDict]) -> Dict[str, DatasetDict]:
         """Cast the `audio` column to `target_sample_rate` on every split.
 
@@ -209,12 +346,17 @@ class DataIngestPipeline:
         return datasets
 
     def _join(self, datasets: Dict[str, DatasetDict]) -> DatasetDict:
-        """Concatenate every source's matching splits into one DatasetDict."""
-        split_names = set.intersection(*(set(dsd.keys()) for dsd in datasets.values()))
+        """Concatenate every source's splits into one DatasetDict.
+
+        Uses the union (not intersection) of split names: a source missing
+        a given split (e.g. ATCOSIM has no `test` split) simply contributes
+        no rows to it, rather than that split being dropped entirely.
+        """
+        split_names = set.union(*(set(dsd.keys()) for dsd in datasets.values()))
         return DatasetDict(
             {
                 split_name: concatenate_datasets(
-                    [dsd[split_name] for dsd in datasets.values()]
+                    [dsd[split_name] for dsd in datasets.values() if split_name in dsd]
                 )
                 for split_name in sorted(split_names)
             }
