@@ -24,7 +24,7 @@ Each subfolder keeps a `README.md` placeholder so the empty directory structure 
 > selection") used `jlvdoorn/atco2-asr` as the real-ATC-audio source instead of
 > `jacktol/ATC-ASR-Dataset`. It was replaced, not supplemented, once it became clear
 > `ATC-ASR-Dataset` is itself built in part from the same public "ATCO2 1-Hour Test Subset"
-> `atco2-asr` wraps — running both risked duplicate/overlapping recordings and train/test
+> `atco2-asr` wraps; running both risked duplicate/overlapping recordings and train/test
 > leakage. `data/raw/atco2-asr/` is no longer part of the ingestion pipeline's `sources`.
 
 ## Data sources
@@ -37,7 +37,7 @@ Each subfolder keeps a `README.md` placeholder so the empty directory structure 
 Both HF datasets ship as audio (`audio`) + transcription (`text`) pairs, English only.
 `ATC-ASR-Dataset` additionally includes an `id` field (an opaque per-row hash; kept as
 `source_id` after ingestion). Neither ships recording-level metadata (airport, position,
-waypoints) — the retired `atco2-asr`'s `info` field was the only source that did.
+waypoints); the retired `atco2-asr`'s `info` field was the only source that did.
 
 ## Download steps
 
@@ -92,7 +92,7 @@ transcriptions outside this project, and do not use them for any commercial purp
   but with no formal open-source license attached. Consult the
   [full manual](http://www2.spsc.tugraz.at/databases/ATCOSIM/DOC/atcosim_report.pdf) before any
   use beyond coursework, and attribute TU Graz SPSC when citing.
-- **ATC-ASR-Dataset**: built in part from the **ATCO2 1-Hour Test Subset** — the same tier of
+- **ATC-ASR-Dataset**: built in part from the **ATCO2 1-Hour Test Subset**, the same tier of
   the ATCO2 corpus released by the project for **research purposes only** (the full training
   set and official 4h test set are separately licensed, commercially/non-commercially, through
   [ELRA](https://catalogue.elra.info/en-us/repository/browse/ELRA-S0484/)). Cite the ATCO2

@@ -102,16 +102,16 @@ Potential evaluation measures include:
 
 Not every transmission is equally difficult to transcribe, and this question is about *why*. **Acoustic characteristics** describe the audio signal itself, such as how long a transmission runs, how quickly someone speaks, and how noisy or clear the recording is. **Linguistic characteristics** describe the spoken content, such as how many words are packed into a transmission, and how much operationally dense information (e.g., callsigns, numbers, commands, etc.) it carries. If certain acoustic or linguistic profiles turn out to correlate with higher error rates, then it's something that can be addressed. It points to where a model is likely to fail, and suggests targeted responses (e.g., more training data for that condition, preprocessing to compensate for noise, flagging low-confidence transcripts for manual review, etc.).
 
-**Core characteristics** (implemented in the comprehensive EDA and populated for every transmission — see [notebooks/comprehensive_eda.ipynb](../notebooks/comprehensive_eda.ipynb) and Section 4 below):
+**Core characteristics** (implemented in the comprehensive EDA and populated for every transmission; see [notebooks/comprehensive_eda.ipynb](../notebooks/comprehensive_eda.ipynb) and Section 4 below):
 
 - Transmission duration (`duration_sec`)
 - Word count (`word_count`) and character count (`character_count`)
 - Speech rate (`speech_rate_wpm`)
 - Recording origin (`dataset_source`): whether the audio was collected from live operational communications or a controlled/simulated environment, since collection method turned out to correlate strongly with acoustic bandwidth, vocabulary variety, and phraseology structure (see Section 4)
-- Acoustic proxies: RMS energy, silence percentage, an SNR dynamic-range proxy (heuristic — see the caveat in Section 4), zero-crossing rate, spectral centroid, and spectral bandwidth
-- Text proxies standing in for Research Question 2's not-yet-built extraction output: numeric-token count, ATC command-verb count, and callsign-like-sequence count — all lightweight vocabulary/regex proxies, not ground-truth entity labels
+- Acoustic proxies: RMS energy, silence percentage, an SNR dynamic-range proxy (heuristic; see the caveat in Section 4), zero-crossing rate, spectral centroid, and spectral bandwidth
+- Text proxies standing in for Research Question 2's not-yet-built extraction output: numeric-token count, ATC command-verb count, and callsign-like-sequence count, all lightweight vocabulary/regex proxies, not ground-truth entity labels
 
-**Planned characteristics** (still not built): true aviation-entity counts from real named-entity extraction (the proxies above are a stand-in, not a substitute), and speaker role — neither current source dataset publishes a speaker-role field, so this remains N/A pending a labeled data source or a new annotation effort, not just an implementation gap.
+**Planned characteristics** (still not built): true aviation-entity counts from real named-entity extraction (the proxies above are a stand-in, not a substitute), and speaker role: neither current source dataset publishes a speaker-role field, so this remains N/A pending a labeled data source or a new annotation effort, not just an implementation gap.
 
 Potential relationships to investigate include:
 
@@ -135,16 +135,16 @@ After combining the two datasets and running data-quality checks, they provide *
 utterances** (13,956 train / 1,816 validation / 1,909 test) across roughly **17.9 hours** of
 ATC audio. `DataIngestPipeline` (`src/preprocessing/ingest.py`) joins them, resamples all audio
 to a common 16kHz sample rate, derives utterance-level acoustic and text features, and runs
-auditable data-quality checks — see Section 4 for the full cleaning/feature-engineering
+auditable data-quality checks; see Section 4 for the full cleaning/feature-engineering
 methodology and findings.
 
 **A note on dataset selection.** The proposal-stage EDA used **ATCO2-ASR**
 ([`jlvdoorn/atco2-asr`](https://huggingface.co/datasets/jlvdoorn/atco2-asr), 559 utterances) as
 the real-ATC-audio source. During the comprehensive EDA phase, a larger real-ATC alternative was
-found — **ATC-ASR-Dataset** — but its dataset card revealed it's built in part from "the ATCO2
+found (**ATC-ASR-Dataset**), but its dataset card revealed it's built in part from "the ATCO2
 1-Hour Test Subset," the same public release `jlvdoorn/atco2-asr` wraps. Running both would have
 risked duplicate/overlapping recordings across two "sources" that are really the same
-underlying audio, and — worse — could have leaked the same utterance into both a training split
+underlying audio, and, worse, could have leaked the same utterance into both a training split
 (via `atco2-asr`) and a test split (via `atc-asr-dataset`). ATCO2-ASR was therefore **replaced**
 by ATC-ASR-Dataset rather than run alongside it: same real-ATC-audio role in the project, ~9x
 more data (8,122 vs. 559 utterances), with its own train/validation/**test** split (ATCO2-ASR
@@ -173,7 +173,7 @@ ITU phonetic alphabet).
 ATC-ASR-Dataset is a real air-traffic-control speech corpus combining the UWB ATC Corpus
 (Czech-airspace ATC audio, heavily accented English) and the ATCO2 1-Hour Test Subset (diverse
 ATC environments, speaker accents, and acoustic conditions). Because it's real, radio-transmitted
-audio, it serves as the harder, higher-value evaluation target for this project — the acoustic
+audio, it serves as the harder, higher-value evaluation target for this project; the acoustic
 analysis in Section 4 shows it occupies a measurably different (narrower-bandwidth, more
 variable-energy) region of acoustic feature space than the simulated ATCOSIM corpus.
 
@@ -203,7 +203,7 @@ recording date/session information, unlike the retired ATCO2-ASR's filenames.
 
 **One ATC utterance**: a 16kHz mono audio clip and its ground-truth transcript, plus the
 publisher's own opaque row `id`. No recording-level metadata (airport, position, waypoints) is
-provided — a reduction in per-row context compared to the retired ATCO2-ASR dataset's `info`
+provided, a reduction in per-row context compared to the retired ATCO2-ASR dataset's `info`
 field, traded for ~14.5x the utterance count.
 
 ---
@@ -251,7 +251,7 @@ combined audio hours). However, the real-audio ATC-ASR-Dataset remains the evalu
 | Characteristic | Value |
 | --- | --- |
 | Size on disk | ~2.4 GB |
-| Number of rows / utterances | 9,559 (7,459 train / 1,004 validation / 1,096 test, after this project's own session-grouped resplit — see Section 3.5) |
+| Number of rows / utterances | 9,559 (7,459 train / 1,004 validation / 1,096 test, after this project's own session-grouped resplit; see Section 3.5) |
 | Number of columns | 2 raw on Hugging Face (`audio`, `text`); 27 total after `DataIngestPipeline` (see Section 3.5) |
 | Number of audio files | 9,559 |
 | Total audio duration | ~10.46 hours (mean 3.94s per utterance, std 1.51s, range 0.14-38.88s) |
@@ -307,10 +307,10 @@ The comprehensive EDA phase implemented a small step in this direction: `numeric
 `command_verb_count`, and `callsign_like_count` (Section 4) are lightweight vocabulary/regex
 proxies, useful for comparative EDA but explicitly not ground-truth entity labels. The planned
 approach for real extraction is an LLM-based pass (Qwen3.5 Instruct) grounded by a curated
-aviation-terms dictionary (term/acronym, definition, and example usage — e.g. airport codes,
+aviation-terms dictionary (term/acronym, definition, and example usage, e.g. airport codes,
 phraseology terms, equipment/procedure acronyms), used both as an initial gazetteer for
 candidate entity spans and as context the LLM can use to disambiguate an acronym with more
-than one meaning from the surrounding utterance — avoiding the need to train a dedicated
+than one meaning from the surrounding utterance, avoiding the need to train a dedicated
 sequence-labeling model (e.g. a fine-tuned BERT-style NER model) for this project's scope. This
 is not yet implemented; it's documented here as the intended next step once the core ASR work
 is complete.
@@ -392,7 +392,7 @@ each source's original structure and metadata stays intact, then:
    microphone, and simulation scenario, so a naive random split could put two utterances from
    the same session in both train and test. ATCOSIM is re-split into a fresh, session-grouped
    train/validation/test partition so no session straddles a split boundary. ATC-ASR-Dataset's
-   published split is kept as-is — its row ids are opaque hashes with no recoverable session
+   published split is kept as-is: its row ids are opaque hashes with no recoverable session
    key, so a blind reshuffle there couldn't be verified leakage-safe, and its published split is
    already ~80/10/10 and publisher-curated.
 2. **Join (`_join`, `concatenate_datasets`).** Splits are unioned (not intersected) across
@@ -407,14 +407,14 @@ each source's original structure and metadata stays intact, then:
 4. **Data-quality checks (`quality.run_quality_checks`).** Missing audio/transcript,
    zero-duration, corrupt-audio, and true-duplicate rows are dropped, each logged with a reason
    in an auditable cleaning log; repeated (but not duplicate) transcripts are flagged and
-   retained — see Section 4 for why duplicate audio and repeated phrasing are treated
+   retained; see Section 4 for why duplicate audio and repeated phrasing are treated
    differently, and the actual counts found.
 
 The `DataIngestPipeline` produces a standardized utterance-level analytical table
 (`utterance_df`, 17,681 rows, saved to `data/processed/utterances.parquet`) with the following
 structure (the canonical version of this table is `preprocessing.schema.FINAL_UTTERANCE_COLUMNS`,
 kept in code so this documentation can't silently drift from what the pipeline actually
-produces — `schema.validate_final_schema` asserts they match on every run):
+produces; `schema.validate_final_schema` asserts they match on every run):
 
 | Column | Description |
 | --- | --- |
@@ -447,7 +447,7 @@ produces — `schema.validate_final_schema` asserts they match on every run):
 | `repeated_transcript_count` | How many rows (post-cleaning) share this row's `transcript_normalized`. |
 
 > **NOTE:** `speaker_role`, real `callsign_count`/`command_count`/`entity_count` (from ground-truth
-> NER, as opposed to the proxy columns above) are not yet included — see Section 3.3's deferred
+> NER, as opposed to the proxy columns above) are not yet included; see Section 3.3's deferred
 > extraction plan. The `DataIngestPipeline` will likely continue to evolve through later
 > iterations of this project (e.g. additional pipeline scripts for model training/evaluation/
 > inference) so the same ingestion logic isn't duplicated.
@@ -456,7 +456,7 @@ produces — `schema.validate_final_schema` asserts they match on every run):
 
 # 4. Exploratory Data Analysis
 
-The full, cell-by-cell EDA — every table and figure below, plus the code that produced them —
+The full, cell-by-cell EDA (every table and figure below, plus the code that produced them)
 is in [notebooks/comprehensive_eda.ipynb](../notebooks/comprehensive_eda.ipynb), which runs
 cleanly top to bottom. This section summarizes the methodology and the findings that matter
 most for the project's research questions; only figures that support a specific stated finding
@@ -466,29 +466,29 @@ are included here (the notebook itself is the complete record).
 
 The corpus started as 17,681 raw rows across both sources (9,559 ATCOSIM + 8,122
 ATC-ASR-Dataset) after joining. `preprocessing.quality.run_quality_checks` then ran six ordered
-checks — missing audio, missing transcript, non-positive duration, corrupt audio (all drop the
+checks: missing audio, missing transcript, non-positive duration, corrupt audio (all drop the
 row if triggered), true-duplicate rows (drop), and repeated transcripts (flag only, never
-drop) — logging every stage's `rows_in`/`rows_flagged`/`rows_removed`/`rows_out` to an auditable
+drop), logging every stage's `rows_in`/`rows_flagged`/`rows_removed`/`rows_out` to an auditable
 cleaning log rather than silently mutating the data. **Result: 0 rows were dropped by any check
-in this corpus** — no corrupt audio, no missing transcripts, no non-positive durations, and no
+in this corpus**: no corrupt audio, no missing transcripts, no non-positive durations, and no
 true accidental duplicates (every one of the 17,681 rows has a unique `audio_checksum`). The
 final analytical dataset is the full 17,681 rows, saved to `data/processed/utterances.parquet`.
 
 **Duplicates required a two-way split, not a single rule.** A duplicate *recording* (same
 `audio_checksum` **and** the same normalized transcript) is an accidental data-quality issue and
-is dropped. A duplicate *transcript alone* (same wording, different audio) is expected — ATC
-uses fixed phraseology, so many distinct recordings legitimately share wording — and is
+is dropped. A duplicate *transcript alone* (same wording, different audio) is expected (ATC
+uses fixed phraseology, so many distinct recordings legitimately share wording), and is
 retained, flagged via `is_repeated_transcript`. **20.9% of rows carry a repeated transcript
 overall, but the rate is very different by source: 31.6% for ATCOSIM vs. 8.2% for
 ATC-ASR-Dataset**, consistent with ATCOSIM's simulated exercises drawing from a smaller,
 more-scripted set of scenarios than naturalistic real-world traffic. The most-repeated
 transcripts are short acknowledgements ("roger" ×107, "thank you" ×58, "affirm" ×48, "standby"
-×28) and one recurring scripted exchange ("contact milan one three four five two good bye" ×15)
-— exactly the kind of fixed phraseology this rule is designed to preserve rather than discard.
+×28) and one recurring scripted exchange ("contact milan one three four five two good bye" ×15),
+exactly the kind of fixed phraseology this rule is designed to preserve rather than discard.
 
 **Missingness is entirely structural**, not a data-quality gap: `recorded_at` is null for 100%
 of rows in both sources (neither `atcosim`'s nor ATC-ASR-Dataset's filenames embed a recording
-timestamp — only the retired ATCO2-ASR's did), and `source_id` is null for 100% of `atcosim`
+timestamp; only the retired ATCO2-ASR's did), and `source_id` is null for 100% of `atcosim`
 rows (its Hugging Face mirror simply doesn't provide a row id). Neither is used for anything
 load-bearing; `utterance_id`/`audio_checksum` are this project's canonical identity keys and are
 100% populated.
@@ -498,7 +498,7 @@ load-bearing; `utterance_id`/`audio_checksum` are this project's canonical ident
 ![Acoustic feature distributions by dataset source](../res/figures/acoustic_features_by_source.png)
 
 Six acoustic features (RMS energy, silence percentage, an SNR dynamic-range proxy,
-zero-crossing rate, spectral centroid, spectral bandwidth — formulas, units, and assumptions
+zero-crossing rate, spectral centroid, spectral bandwidth; formulas, units, and assumptions
 documented in `preprocessing/audio_features.py`) were computed per utterance directly from the
 decoded waveform, inline in the same pass that derives `duration_sec`, so no clip is decoded
 twice.
@@ -506,7 +506,7 @@ twice.
 **Finding: real ATC audio (ATC-ASR-Dataset) occupies a measurably narrower-bandwidth region of
 acoustic feature space than simulated ATCOSIM audio.** Mean spectral centroid is 1,460 Hz for
 ATC-ASR-Dataset vs. 2,777 Hz for ATCOSIM; spectral bandwidth is 1,087 Hz vs. 1,657 Hz;
-zero-crossing rate is 0.135 vs. 0.283 — all three consistently lower for the real-audio source.
+zero-crossing rate is 0.135 vs. 0.283: all three consistently lower for the real-audio source.
 This lines up with how each corpus was produced: real ATC audio is transmitted over a narrowband
 VHF radio channel (traditionally ~300-3,400 Hz voice bandwidth), which filters out exactly the
 higher-frequency content these three features measure, while ATCOSIM's recordings are captured
@@ -517,12 +517,12 @@ wouldn't have.
 
 **Modeling implication:** a model trained predominantly on ATCOSIM's clean, full-bandwidth audio
 is learning a measurably different acoustic distribution than it will encounter in real
-deployment — this is exactly the kind of domain gap the real-vs-simulated comparison in this
+deployment; this is exactly the kind of domain gap the real-vs-simulated comparison in this
 project is designed to surface before training begins.
 
 ![Utterance duration by dataset source](../res/figures/duration_by_source.png)
 
-ATCOSIM clips run slightly longer on average (3.94s vs. 3.28s) with a much heavier tail — its
+ATCOSIM clips run slightly longer on average (3.94s vs. 3.28s) with a much heavier tail: its
 maximum (38.9s) is over 2x ATC-ASR-Dataset's (15.3s). That outlier turned out to be an off-domain
 personal conversation captured during a simulation session, not ATC phraseology at all (see
 4.4). Both distributions are unimodal and right-skewed, as expected for short spoken utterances.
@@ -533,14 +533,14 @@ personal conversation captured during a simulation session, not ATC phraseology 
 
 **Finding: ATCOSIM utterances are slightly longer by word count but draw from a much smaller,
 more repetitive vocabulary.** ATCOSIM averages 11.3 words/utterance vs. 10.2 for
-ATC-ASR-Dataset, but ATC-ASR-Dataset has a far richer vocabulary — 1,167 distinct word types vs.
+ATC-ASR-Dataset, but ATC-ASR-Dataset has a far richer vocabulary: 1,167 distinct word types vs.
 830 for ATCOSIM, a type-token ratio of 0.0141 vs. 0.0077 (nearly double), despite ATCOSIM having
 more total word tokens overall (107,913 vs. 82,764, from its larger row count). This is the same
 pattern found in the repeated-transcript analysis (4.1): real-world ATC traffic is lexically
 more varied than scripted simulation exercises, even under standardized phraseology conventions.
 
 ATC-ASR-Dataset also shows a *higher* mean speech rate (187.7 vs. 174.4 WPM) despite shorter
-average clips — plausibly real operational time pressure (controllers packing information
+average clips, plausibly real operational time pressure (controllers packing information
 tightly) vs. more deliberately-paced simulated training speech. Both distributions have a long
 right tail of very-high-WPM outliers, which turned out to be a known artifact of the WPM formula
 on very short clips rather than genuinely fast speech (4.4).
@@ -548,12 +548,12 @@ on very short clips rather than genuinely fast speech (4.4).
 ![Callsign/command proxy distributions by dataset source](../res/figures/callsign_command_proxy_by_source.png)
 
 **These are heuristic proxies, not ground-truth entity annotations** (Section 3.3). ATCOSIM has
-a much higher command-verb detection rate — only 25.7% of its rows have zero detected command
-verbs, vs. 54.8% for ATC-ASR-Dataset — again consistent with ATCOSIM's scripted scenarios
+a much higher command-verb detection rate (only 25.7% of its rows have zero detected command
+verbs, vs. 54.8% for ATC-ASR-Dataset), again consistent with ATCOSIM's scripted scenarios
 emphasizing standard instruction phraseology more systematically, while real traffic includes
 more short acknowledgements and readbacks with no command verb present. Callsign-like detection
 is more similar between sources (~50% vs. ~55% zero-detection); this proxy's fixed,
-non-exhaustive airline-word vocabulary is the likely limiting factor for both sources equally —
+non-exhaustive airline-word vocabulary is the likely limiting factor for both sources equally,
 exactly the gap the planned LLM-based extraction (Section 3.3) is meant to close.
 
 ## 4.4 Outliers
@@ -566,27 +566,27 @@ than a blanket rule:
   not operational ATC phraseology. **Decision: retain in the EDA corpus** (it's legitimate data,
   not corrupt), **but flag as a candidate to exclude specifically from ASR training/eval
   splits**, since it isn't representative of the task the model is meant to learn.
-- **Extreme speech-rate outliers (400+ WPM)** all come from 1-2 word, sub-second clips — a known
+- **Extreme speech-rate outliers (400+ WPM)** all come from 1-2 word, sub-second clips: a known
   mathematical artifact of `speech_rate_wpm = word_count / (duration_sec / 60)` on very small
   denominators, not genuinely fast speech. **Decision: retain the rows**, but treat
   `speech_rate_wpm` as unreliable below ~1 second of audio in any downstream use.
 - **Very short single-word utterances** (~0.14-0.28s: "yeah", "roger", "okay") are genuine,
   expected ATC acknowledgements. One transcript, `"roge"`, is very likely a publisher-side
   transcription typo for "roger" (present in ATCOSIM's original data, not introduced by this
-  pipeline) — noted here as a known source imperfection rather than silently corrected.
+  pipeline), noted here as a known source imperfection rather than silently corrected.
 
 ## 4.5 Class Imbalance and Split Composition
 
 ![Row count by split and dataset source](../res/figures/class_imbalance_split_source.png)
 
-The two sources are reasonably balanced within every split — ATC-ASR-Dataset is 42.6-46.6% of
-each split's rows, ATCOSIM the remainder — so no split is dominated so heavily by one source
+The two sources are reasonably balanced within every split (ATC-ASR-Dataset is 42.6-46.6% of
+each split's rows, ATCOSIM the remainder), so no split is dominated so heavily by one source
 that a model could ignore the other. The overall split proportions (78.9%/10.3%/10.8%
 train/validation/test) land close to, but not exactly, 80/10/10: ATC-ASR-Dataset is left at its
 own near-exact 80/10/10 published split, while ATCOSIM's session-grouped resplit (Section 3.5)
 overshoots slightly, since its ~50 recording sessions can't be divided into exactly-proportioned
-groups. This is a disclosed, intentional trade-off — exact percentages traded for a test set
-with zero same-session leakage — not a defect.
+groups. This is a disclosed, intentional trade-off (exact percentages traded for a test set
+with zero same-session leakage), not a defect.
 
 ## 4.6 Summary of Findings and Modeling Implications
 
@@ -598,7 +598,7 @@ independent angles that all agree:
    than simulated audio.
 2. **Vocabulary:** real audio has nearly 2x the type-token ratio of simulated audio.
 3. **Phraseology structure:** simulated audio has a much higher rate of detected command verbs
-   and repeated transcripts — its scripted scenarios lean on a smaller, more standardized set of
+   and repeated transcripts: its scripted scenarios lean on a smaller, more standardized set of
    instructions.
 4. **Speech rate:** real audio is spoken faster on average despite shorter clips.
 
@@ -606,7 +606,7 @@ independent angles that all agree:
 predominantly on ATCOSIM will see a narrower acoustic distribution and less varied vocabulary
 than it will encounter in real deployment. Any evaluation strategy for this project should
 report performance on the real-audio (ATC-ASR-Dataset) test split separately from
-simulated-audio performance, not just an aggregate — aggregating them would hide exactly the
+simulated-audio performance, not just an aggregate; aggregating them would hide exactly the
 domain gap this EDA exists to surface. Two concrete, actionable follow-ups also came out of this
 analysis: exclude the identified off-domain outlier (4.4) from training/eval splits, and treat
 `speech_rate_wpm` as unreliable below ~1 second of audio wherever it's used as a feature.
@@ -616,7 +616,7 @@ analysis: exclude the identified off-domain outlier (4.4) from training/eval spl
 # References
 
 Citation details below were compiled from each dataset's Hugging Face card, project homepage, or
-library documentation — worth a final spot-check against the primary source before formal
+library documentation, and are worth a final spot-check against the primary source before formal
 submission.
 
 ATCO2 Project. (n.d.). *ATCO2: Automatic collection and processing of voice data from air-traffic communications*. https://www.atco2.org/
