@@ -3,27 +3,21 @@
 or extend independently.
 
 These are all *proxies* standing in for the deferred, ground-truth NER work
-(see the project checklist) -- non-exhaustive by design, not a validated
-aviation-phraseology reference. Treat anything derived from them as a rough,
-comparative signal, not an exact count.
+This is non-exhaustive by design.
 """
 
 from __future__ import annotations
 
-# ATC uses "niner" (not "nine") to avoid confusion with German "nein" over
-# noisy radio, and ICAO-standard "tree" for "three"; both spellings and the
-# standard forms are included since transcripts may use either.
+# Source: https://www.faa.gov/air_traffic/publications/atpubs/fs_html/chap11_section_1.html#$paragraph11-1-5
 ATC_NUMERAL_WORDS = frozenset(
     {
         "zero", "one", "two", "three", "tree", "four", "five", "six",
         "seven", "eight", "nine", "niner",
-        "hundred", "thousand", "decimal", "point",
     }
 )
 
-# ITU/ICAO phonetic alphabet -- used natively in both source transcripts for
-# callsign letters (e.g. "SIERRA DELTA MIKE").
-ITU_PHONETIC_ALPHABET = frozenset(
+# Source: https://www.faa.gov/air_traffic/publications/atpubs/fs_html/chap11_section_1.html#$paragraph11-1-5
+ICAO_PHONETIC_ALPHABET = frozenset(
     {
         "alpha", "bravo", "charlie", "delta", "echo", "foxtrot", "golf",
         "hotel", "india", "juliet", "juliett", "kilo", "lima", "mike",
@@ -32,10 +26,8 @@ ITU_PHONETIC_ALPHABET = frozenset(
     }
 )
 
-# Non-exhaustive sample of airline/operator call-words observed in this
-# project's corpora (ATCOSIM, ATC-ASR-Dataset) plus a few common ICAO
-# telephony designators -- a proxy anchor for callsign-like detection, not a
-# validated/complete aviation callsign registry.
+# Non-exhaustive sample of airline/operator call-words observed in ATCOSIM and ATC-ASR-Dataset plus a few common ICAO
+# telephony designators.
 KNOWN_CALLSIGN_WORDS = frozenset(
     {
         "swissair", "lufthansa", "alitalia", "luxair", "csa", "shamrock",
@@ -44,8 +36,8 @@ KNOWN_CALLSIGN_WORDS = frozenset(
     }
 )
 
-# A minimal, fixed proxy for ATC command verbs -- explicitly a placeholder
-# for the deferred, real NER work, not meant to be expanded further here.
+# A minimal, fixed proxy for ATC command verbs
+# NOTE: This is explicitly a placeholder for the deferred NER work and not meant to be expanded further here.
 ATC_COMMAND_VERBS = frozenset(
     {
         "climb", "descend", "maintain", "contact", "cleared", "turn",
