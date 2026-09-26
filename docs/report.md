@@ -1,5 +1,7 @@
 # ATC Communications Intelligence: Speech Recognition and Information Extraction for Aviation Safety
 
+# 1. Title and Author
+
 |  |  |
 | --- | --- |
 | **Author** | Brett Allen |
@@ -616,8 +618,8 @@ analysis: exclude the identified off-domain outlier (4.4) from training/eval spl
 # References
 
 Citation details below were compiled from each dataset's Hugging Face card, project homepage, or
-library documentation, and are worth a final spot-check against the primary source before formal
-submission.
+library documentation, and were spot-checked against those primary sources (author names, title,
+venue/year, and link liveness) on 2026-09-26.
 
 ATCO2 Project. (n.d.). *ATCO2: Automatic collection and processing of voice data from air-traffic communications*. https://www.atco2.org/
 
