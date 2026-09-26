@@ -617,10 +617,6 @@ analysis: exclude the identified off-domain outlier (4.4) from training/eval spl
 
 # References
 
-Citation details below were compiled from each dataset's Hugging Face card, project homepage, or
-library documentation, and were spot-checked against those primary sources (author names, title,
-venue/year, and link liveness) on 2026-09-26.
-
 ATCO2 Project. (n.d.). *ATCO2: Automatic collection and processing of voice data from air-traffic communications*. https://www.atco2.org/
 
 Hofbauer, K., Petrik, S., & Hering, H. (2008). The ATCOSIM corpus of non-prompted clean air traffic control speech. In *Proceedings of the Sixth International Conference on Language Resources and Evaluation (LREC'08)*. European Language Resources Association.
