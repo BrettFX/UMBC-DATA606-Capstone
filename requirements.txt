@@ -10,4 +10,9 @@ matplotlib==3.10.6
 seaborn==0.13.2
 scipy==1.18.1
 wordcloud==1.9.4
+torch==2.5.1  # NOTE: a plain install from this file pulls the CPU/default-CUDA-tag wheel;
+              # this environment uses the +cu124 build (`pip install torch==2.5.1 --index-url
+              # https://download.pytorch.org/whl/cu124`), which PyPI's default index won't reproduce.
+accelerate==1.2.1
+jiwer==3.1.0
 
