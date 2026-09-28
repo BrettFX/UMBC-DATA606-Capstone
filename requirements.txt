@@ -1,4 +1,4 @@
-# Python 3.12.4
+# Python 3.12.x
 datasets==3.2.0
 transformers==4.57.6
 librosa==1.0.0
