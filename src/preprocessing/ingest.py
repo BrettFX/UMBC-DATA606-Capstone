@@ -50,6 +50,16 @@ from . import audio_features, quality, schema, text_features
 
 logger = logging.getLogger(__name__)
 
+
+class MissingRawDataError(RuntimeError):
+    """Raised when cached processed output exists but the raw audio data is absent.
+
+    The processed parquet stores only path pointers to WAV files; the actual
+    audio is required for downstream modeling.  Re-run with ``force=True`` to
+    re-download the raw data and rebuild the processed outputs.
+    """
+
+
 # Hugging Face repo IDs, keyed by the short `dataset_source` name used
 # throughout this project.
 #
@@ -222,6 +232,16 @@ class DataIngestPipeline:
         if not force:
             cached = self._load_cached()
             if cached is not None:
+                if not self.raw_data_exists():
+                    raise MissingRawDataError(
+                        "Cached processed data found under "
+                        f"{Path(self.data_dir) / 'processed'} but the raw audio "
+                        f"files are missing from {Path(self.data_dir) / 'raw'}. "
+                        "The WAV files are required for downstream modeling because "
+                        "the processed parquet only stores path pointers, not the "
+                        "audio data itself. Re-run with force=True to re-download "
+                        "the raw data."
+                    )
                 combined_dataset, utterance_df = cached
                 self._validate(combined_dataset, utterance_df)
                 self._compute_validation_report(utterance_df)
@@ -659,6 +679,32 @@ class DataIngestPipeline:
         utterance_df.to_parquet(processed_dir / "utterances.parquet", index=False)
         if self.dropped_rows_ is not None and len(self.dropped_rows_):
             self.dropped_rows_.to_parquet(processed_dir / "dropped_rows.parquet", index=False)
+
+    def download_raw(self) -> None:
+        """Download each source's raw data from Hugging Face without further processing.
+
+        Useful for restoring raw WAV files after they've been purged, without
+        having to re-run the full (expensive) ingestion pipeline when cached
+        processed output is still valid.  Unlike ``_load()``, this does not
+        populate ``source_counts_``, so a subsequent ``run(force=False)`` that
+        loads from cache won't hit the pre-filtering count mismatch in
+        ``_validate()``.
+        """
+        for source_name, repo_id in self.sources.items():
+            cache_dir = str(Path(self.data_dir) / "raw" / source_name)
+            load_dataset(repo_id, cache_dir=cache_dir)
+            logger.info("Downloaded raw data for %r to %s", source_name, cache_dir)
+
+    def raw_data_exists(self) -> bool:
+        """Return True if at least one source's raw download directory exists.
+
+        Used to guard against loading a cached parquet-only result when the
+        underlying WAV files (referenced by path in that parquet) have been
+        purged -- in that state, modeling steps that open audio by path would
+        fail silently or with confusing I/O errors.
+        """
+        raw_dir = Path(self.data_dir) / "raw"
+        return any((raw_dir / source_name).exists() for source_name in self.sources)
 
     def purge_raw(self) -> None:
         """Delete each processed source's raw Hugging Face download cache

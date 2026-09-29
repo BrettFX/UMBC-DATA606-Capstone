@@ -24,7 +24,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
-from preprocessing import DataIngestPipeline  # noqa: E402 -- import after sys.path setup
+from preprocessing import DataIngestPipeline, MissingRawDataError  # noqa: E402 -- import after sys.path setup
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +59,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="After a successful run, delete each source's raw Hugging Face "
         "download cache under <data-dir>/raw/ to reclaim disk space. Only "
         "removes sources this run actually used; a later run without "
-        "cached output re-downloads them.",
+        "cached output re-downloads them. NOTE: only use this after ALL "
+        "pipeline stages (training, inference, etc.) have completed, since "
+        "those stages need the WAV files.",
+    )
+    parser.add_argument(
+        "--purge-only",
+        action="store_true",
+        help="Purge raw data without running the ingestion pipeline. "
+        "Requires that processed output already exists under <data-dir>/processed/. "
+        "Intended to be called by the pipeline driver after all stages complete.",
     )
     parser.add_argument(
         "--log-level",
@@ -70,6 +79,21 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def _prompt_redownload() -> bool:
+    """Ask the user whether to re-download raw data. Returns True if yes."""
+    print(
+        "\nWarning: cached processed data exists but the raw audio WAV files are missing.\n"
+        "The WAV files are required for downstream modeling -- the processed parquet\n"
+        "only contains path pointers, not the audio data itself."
+    )
+    try:
+        reply = input("Re-download raw data only (no reprocessing)? [y/N]: ").strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        print()
+        return False
+    return reply in ("y", "yes")
+
+
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     logging.basicConfig(
@@ -77,7 +101,26 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     pipeline = DataIngestPipeline(data_dir=str(args.data_dir), num_proc=args.num_proc)
-    combined_dataset, utterance_df = pipeline.run(force=args.force)
+
+    if args.purge_only:
+        pipeline.purge_raw()
+        return 0
+
+    try:
+        combined_dataset, utterance_df = pipeline.run(force=args.force)
+    except MissingRawDataError as exc:
+        print(f"\nError: {exc}", file=sys.stderr)
+        if _prompt_redownload():
+            pipeline.download_raw()
+            # Cached processed output is still valid; load it now that the raw
+            # WAV files are back on disk.
+            combined_dataset, utterance_df = pipeline.run(force=False)
+        else:
+            print(
+                "Aborting. Re-run with --force to reprocess from scratch.",
+                file=sys.stderr,
+            )
+            return 1
 
     n_splits = len(combined_dataset)
     print(f"\nIngestion complete: {len(utterance_df)} utterances across {n_splits} splits.")

@@ -14,6 +14,11 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# Set by run_data_ingest() and re-used by run_purge_raw() so both call the
+# same data-dir and log-level without asking the user a second time.
+PIPELINE_DATA_DIR=""
+PIPELINE_LOG_LEVEL="INFO"
+
 # The conda environment this project's dependencies (librosa, torch,
 # transformers, jiwer, ...) are installed into -- matches the notebooks'
 # kernelspec `display_name`. Override if you use a different env name.
@@ -86,22 +91,43 @@ run_data_ingest() {
         return 0
     fi
 
-    local data_dir num_proc log_level force=0 purge_raw=0
+    local data_dir num_proc log_level force=0
     data_dir=$(prompt_value "Data directory (blank = repo default: ${REPO_ROOT}/data)" "")
     prompt_yes_no "Force recompute even if cached processed output exists?" "n" && force=1
     num_proc=$(prompt_value "Number of worker processes for feature derivation (blank = single-process)" "")
-    prompt_yes_no "Purge raw downloads after a successful run (frees disk space)?" "n" && purge_raw=1
     log_level=$(prompt_value "Log level (DEBUG/INFO/WARNING/ERROR)" "INFO")
+
+    # Persist for use by run_purge_raw() after all stages complete.
+    PIPELINE_DATA_DIR="$data_dir"
+    PIPELINE_LOG_LEVEL="$log_level"
 
     local args=()
     [[ -n "$data_dir" ]] && args+=(--data-dir "$data_dir")
     [[ "$force" -eq 1 ]] && args+=(--force)
     [[ -n "$num_proc" ]] && args+=(--num-proc "$num_proc")
-    [[ "$purge_raw" -eq 1 ]] && args+=(--purge-raw)
     args+=(--log-level "$log_level")
 
     echo
     echo "Using python3: $(command -v python3)"
+    echo "Running: python3 scripts/run_ingest.py ${args[*]}"
+    python3 "$REPO_ROOT/scripts/run_ingest.py" "${args[@]}"
+}
+
+# Purge raw HuggingFace download caches via --purge-only (no pipeline re-run).
+# Called only after all pipeline stages complete so training/inference can still
+# read the WAV files during their runs.
+run_purge_raw() {
+    echo
+    echo "--- Stage: Cleanup ---"
+    if ! prompt_yes_no "Purge raw data downloads to reclaim disk space?" "n"; then
+        echo "Skipping purge."
+        return 0
+    fi
+
+    local args=(--purge-only --log-level "$PIPELINE_LOG_LEVEL")
+    [[ -n "$PIPELINE_DATA_DIR" ]] && args+=(--data-dir "$PIPELINE_DATA_DIR")
+
+    echo
     echo "Running: python3 scripts/run_ingest.py ${args[*]}"
     python3 "$REPO_ROOT/scripts/run_ingest.py" "${args[@]}"
 }
@@ -134,6 +160,7 @@ main() {
     run_data_ingest
     run_training
     run_inference
+    run_purge_raw
     echo
     echo "=== Pipeline driver complete ==="
 }

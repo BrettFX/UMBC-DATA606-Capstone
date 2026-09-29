@@ -14,13 +14,14 @@ Public API:
 """
 
 from .audio_features import compute_acoustic_features
-from .ingest import DataIngestPipeline
+from .ingest import DataIngestPipeline, MissingRawDataError
 from .quality import run_quality_checks
 from .schema import FINAL_UTTERANCE_COLUMNS, validate_final_schema
 from .text_features import compute_transcript_features
 
 __all__ = [
     "DataIngestPipeline",
+    "MissingRawDataError",
     "run_quality_checks",
     "compute_acoustic_features",
     "compute_transcript_features",
