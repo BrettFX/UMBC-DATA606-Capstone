@@ -13,6 +13,7 @@ wordcloud==1.9.4
 torch==2.5.1  # NOTE: a plain install from this file pulls the CPU/default-CUDA-tag wheel;
               # this environment uses the +cu124 build (`pip install torch==2.5.1 --index-url
               # https://download.pytorch.org/whl/cu124`), which PyPI's default index won't reproduce.
-accelerate==1.2.1
+accelerate==1.15.0  # must stay new enough for transformers==4.57.6's Trainer (older accelerate
+                    # lacks Accelerator.unwrap_model's `keep_torch_compile` kwarg it now passes)
 jiwer==3.1.0
 
