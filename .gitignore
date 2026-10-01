@@ -55,3 +55,4 @@ huggingface/
 Thumbs.db
 .vscode/
 models/
+~$*.*
