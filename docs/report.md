@@ -433,6 +433,117 @@ Every analysis in this section converges on the same underlying signal, approach
 
 ---
 
+# 5. Machine Learning
+
+This section covers the project's first modeling milestone: a working Automatic Speech Recognition (ASR) prototype addressing Research Question 1 (Section 2.3), plus the supporting infrastructure built alongside it. The full, runnable prototype is [notebooks/machine_learning.ipynb](../notebooks/machine_learning.ipynb), which executes cleanly end to end; this section summarizes the methodology, results, and findings that matter most. Aviation Information Extraction (Research Question 2) has not started yet; see 5.8 for where it fits in the remaining roadmap.
+
+## 5.1 Modeling Infrastructure
+
+Two pieces of reusable infrastructure were built alongside the ASR prototype so that data curation and (eventually) model training/evaluation don't require running a notebook end to end:
+
+- **`scripts/run_ingest.py`**: a standalone CLI wrapper around `DataIngestPipeline` (the same pipeline documented in Section 3.5), with `--force` (recompute from scratch), `--num-proc` (parallelize feature derivation), `--purge-raw` (delete each source's raw Hugging Face download cache once `data/processed/` exists, to reclaim disk space), `--purge-only`, and `--log-level`. This avoids the EDA notebook's much larger memory footprint (plots, audio-playback widgets, word clouds all sharing one kernel with the pipeline's own data), which matters on machines with limited RAM.
+- **`run-pipeline.sh`**: an interactive driver script intended to orchestrate every stage of the project's pipeline (data ingest today; training and inference to be added as their own stages). It asks, per stage, whether to run it and what arguments to pass, so the same question flow will carry over once the ASR and NER training/evaluation pipelines described in 5.8 exist.
+
+As a practical side effect, this infrastructure was validated across two different development machines: the ASR prototype below was run end to end on both an RTX 3070 Ti Laptop GPU (8.6 GB VRAM) and, independently, an RTX 1000 Ada Generation Laptop GPU (6.4 GB VRAM), reproducing the same baseline and domain-adapted-comparison results on both (see the non-determinism caveat in 5.4 for the one piece that doesn't reproduce exactly).
+
+## 5.2 ASR Experimental Design
+
+**Evaluation subset.** The primary evaluation set is this project's own held-out `test` split from `DataIngestPipeline` (1,909 rows: 1,096 ATCOSIM + 813 ATC-ASR-Dataset; Section 3.5). A stratified 100-utterance sub-sample (43 ATC-ASR-Dataset / 57 ATCOSIM, proportional to each source's share of the pool) is drawn for fast iteration, via a configurable sample-size knob that scales to the full test set with no other code changes. The one documented off-domain outlier (the 38.9-second ATCOSIM personal-conversation clip; Section 4.4) is excluded from this pool before sampling, since it isn't representative of the task an ASR model is meant to learn.
+
+**Leakage prevention** is inherited entirely from `DataIngestPipeline` (Section 3.5): ATCOSIM's session-grouped resplit and ATC-ASR-Dataset's preserved publisher split. No additional resplitting happens in the ASR prototype itself.
+
+**Scoring normalization.** Whisper decodes numbers as digits (e.g., "6000"), while both corpora spell every number out as individual spoken digit words per ATC convention (e.g., "six zero zero zero"). Left unhandled, this digit/word-format mismatch would dominate Word Error Rate (WER) with scoring artifacts rather than real recognition errors, so a digit-to-spoken-word expander is applied to both reference and hypothesis text before scoring only (raw model output is preserved separately). This rule-based approach has a known gap: it doesn't handle callsign-specific expansions or reconcile "nine" vs. the ATC-standard "niner" (see 5.5).
+
+**Three ASR conditions, evaluated on the same fixed test records:**
+
+1. **Baseline**: `openai/whisper-medium.en` (769M parameters), a generic, English-only Whisper checkpoint with no ATC-specific training. Establishes a zero-shot reference point.
+2. **Comparison**: `jacktol/whisper-medium.en-fine-tuned-for-ATC`, a Whisper medium.en checkpoint already fine-tuned on `jacktol/ATC-ASR-Dataset` — the same underlying corpus behind this project's `atc-asr-dataset` source. **Disclosed limitation:** the published dataset's split sizes match almost exactly what this project's pipeline independently preserves for that source, but there is no public confirmation that the fine-tuning run actually respected that split boundary. Any `atc-asr-dataset`-subset result for this model should be read as carrying an unverified train/test-overlap risk, not a clean held-out result.
+3. **Project fine-tune**: `openai/whisper-small.en` (244M parameters), fine-tuned by this project on its own train split (Section 5.4). Unlike the comparison model, this condition has no leakage risk against the `atc-asr-dataset` test split, since the whole corpus was built leakage-safe from the start (Section 3.5).
+
+## 5.3 Baseline and Domain-Adapted Comparison Results
+
+| Model | Real audio WER (ATC-ASR-Dataset) | Real audio CER | Simulated audio WER (ATCOSIM) | Simulated audio CER |
+| --- | --- | --- | --- | --- |
+| Baseline (`whisper-medium.en`) | 161.9% | 120.0% | 21.9% | 11.8% |
+| Comparison (`jacktol`, domain-adapted) | 9.2% | 3.8% | 12.9% | 7.6% |
+
+![ASR model comparison: WER by dataset source](../res/figures/asr_model_comparison_wer.png)
+
+As expected from Section 4's acoustic domain-gap finding, the baseline's WER is far worse on real audio than on simulated audio. The domain-adapted comparison model closes most of that gap, though its real-audio number carries the leakage caveat from 5.2. The baseline's 161.9% aggregate (a WER over 100% means its output has more total edit operations than the reference has words, driven by runaway outputs — see 5.5) is a useful early signal in itself: a generic, non-domain-adapted model is not simply "worse" at ATC audio, it can fail catastrophically on it.
+
+## 5.4 Fine-Tuning a Project-Specific Model
+
+**Target model**: `openai/whisper-small.en` rather than medium.en. Full fine-tuning keeps fp32 master weights (for `fp16=True` mixed-precision training) plus Adam's two fp32 moment buffers plus fp32 gradients; for medium.en (769M parameters) that's roughly 4 × 769M × 4 bytes ≈ 12.3 GB just for weights, gradients, and optimizer state, before any activations — more than an 8GB laptop GPU has available. `whisper-small.en` (244M parameters) needs roughly a quarter of that and fits comfortably.
+
+**Training data**: a stratified 1,000-row sample of the ~13,956-row train split (466 ATC-ASR-Dataset / 534 ATCOSIM), trained for 3 epochs, with a 200-row stratified validation subset for per-epoch checkpoint selection (never the test split). This validates the full training setup (data preparation, a custom Whisper data collator, WER-based `compute_metrics`, checkpointing) end to end, with the same sample-size knob used for the evaluation subset making it straightforward to scale up to the full train split later.
+
+**Hyperparameters**: learning rate 1e-5, `per_device_train_batch_size=4` with `gradient_accumulation_steps=8` (effective batch size 32), fp16 mixed precision, 3 epochs, best checkpoint selected by validation WER. **An engineering finding worth recording:** an initial attempt at `per_device_train_batch_size=8` pinned the GPU at 98% VRAM and caused severe memory-pressure slowdown (step time climbed from roughly 4.4 seconds to over 18 seconds as training progressed); halving the batch size while doubling gradient accumulation (same effective batch size, far less peak memory) fixed it completely.
+
+**Results:**
+
+| Model | Real audio WER | Real audio CER | Simulated audio WER | Simulated audio CER |
+| --- | --- | --- | --- | --- |
+| Project fine-tune (`whisper-small.en`) | ~83% | ~79% | ~8% | ~3% |
+
+The project's fine-tune beat the medium.en baseline in both domains despite having a quarter of the parameters, after only 1,000 training examples and 3 epochs. It does **not** generalize to real audio anywhere near as well as jacktol's medium-sized, far-more-extensively-trained comparison model (~83% vs. 9.2% WER) — expected, given the gap in both model size and training data volume. It does edge out jacktol's model on ATCOSIM (~8% vs. 12.9%), but this is not an apples-to-apples comparison: jacktol's model never saw ATCOSIM during its own training, while this project's fine-tuning subset deliberately included it.
+
+**Note on reproducibility:** this project's own fine-tuned model's exact figures vary by a few tenths of a percentage point each time it is retrained, even with fixed seeds, due to ordinary GPU training non-determinism (confirmed by independently reproducing this fine-tuning run on two different GPUs, per 5.1). The baseline and comparison model figures above come from fixed, already-trained checkpoints doing pure inference and reproduce exactly, run to run.
+
+## 5.5 Error Analysis and Failure Modes
+
+Word-level alignment (substitutions, deletions, insertions) on the worst-scoring utterances from each model surfaced a small taxonomy of recurring failure modes:
+
+| Category | Description | Representative example |
+| --- | --- | --- |
+| Repetition-loop hallucination | Whisper's decoder gets stuck repeating a short phrase dozens or hundreds of times on short, low-information, or noisy audio. A known, documented Whisper failure mode (Radford et al., 2022) that **persists even after fine-tuning** — this project's own fine-tune exhibits it too, just on a different utterance than the baseline. | Baseline: `atc-asr-dataset-test-000294` ("good morning" × ~150); project fine-tune: `atc-asr-dataset-test-000445` ("flight" × ~216) |
+| Fabricated/unrelated hallucination | On sufficiently degraded real audio, the model produces a fluent, plausible-sounding sentence with **no relationship to the actual utterance** — not a misrecognition of what was said, but a fabrication. Verified by directly listening to the source audio and confirming the ground-truth reference is correct. | `atc-asr-dataset-test-000659` (duration 3.75s): reference "CSA TWO EIGHT SEVEN PRAHA RADAR RADAR CONTACT DESCEND FLIGHT LEVEL ONE ZERO ZERO"; baseline output "If you have any questions, please contact the flight control team at 1-800-566-7200." |
+| Numeral substitution / "nine" vs. "niner" | The scoring normalizer (5.2) always expands a digit to "nine," so a reference using the ATC-standard "niner" mismatches an otherwise-correct hypothesis "nine." | Comparison model: reference "niner" → hypothesis "nine" |
+| Callsign misrecognition | An airline/place-name word substituted for a similar-sounding wrong one, or — more often for the smaller fine-tuned model — a phonetic-alphabet callsign garbled into unrelated-sounding words entirely. | Baseline: "algerie" → "jerry"; project fine-tune: "eight juliett echo" → "athria degol" |
+| Short-word / sign-off deletion | A trailing acknowledgement or sign-off word dropped entirely. | Comparison model: "tschuss" deleted |
+| Homophone confusion | A word substituted for one that sounds identical or near-identical but changes meaning or spelling. | Baseline: "rhein" → "rhine"; "four" → "for" |
+
+The two hallucination categories are both documented Whisper phenomena rather than bugs specific to this project's pipeline (Radford et al., 2022; see also the practitioner write-up on the repetition-loop pattern at https://metawhisp.com/blog/whisper-repeating-word-loop-fix/). Because fine-tuning did not eliminate the repetition-loop pattern, future work will need a generation-time mitigation (e.g., a repetition penalty or `no_repeat_ngram_size` on `.generate()`, or post-hoc output filtering) rather than relying on more training data alone.
+
+**A methodological finding that follows directly from these outliers:** a single runaway output can dominate a corpus-level WER average. The baseline's 161.9% aggregate real-audio WER (5.3) reflects a *median* per-utterance WER of only 55.6% once the hallucinated outliers are set aside — still clearly worse than its simulated-audio performance, but far less extreme than the aggregate implies. The project's own fine-tune shows the identical pattern (82.9% aggregate vs. a 33.3% median). This is a caution against reading a single aggregate WER number in isolation, and the reason this project reports a per-utterance error taxonomy alongside it rather than instead of it.
+
+## 5.6 Aviation-Specific Evaluation
+
+As noted in Section 2.2, word-level WER treats every token equally, but a missed callsign or altitude digit matters far more operationally than a missed filler word. Since neither corpus provides ground-truth entity-span labels (Section 3.3), aviation-specific accuracy was measured with proxy metrics: the fraction of reference tokens belonging to a given vocabulary (ICAO phonetic alphabet + known airline words for callsigns; ATC numeral words; ATC command verbs — the same vocabularies introduced in Section 4.3) that also appear in the model's hypothesis, plus new best-effort presence-only regex detectors for altitude, heading, runway, and frequency phraseology (none of which exist in the Section 4 proxy vocabulary).
+
+![WER vs. callsign-recall proxy](../res/figures/wer_vs_callsign_recall.png)
+
+**The domain gap is sharper in callsign recognition than aggregate WER alone suggests.** The baseline's callsign-recall proxy collapses from 67.9% on simulated audio to just 10.4% on real audio — a much steeper drop than the aggregate WER figures (21.9% → 161.9%) imply. The domain-adapted comparison model holds callsign recognition far more evenly across sources (86.1% simulated vs. 97.1% real, with the real-audio figure still carrying the leakage caveat from 5.2). The project's own fine-tune lands in between the two (~85% simulated vs. ~57% real), consistent with having trained on far less data than the comparison model.
+
+Correlating per-utterance WER against these proxy recall metrics gives only a moderate, mostly negative relationship — for example, the baseline's corr(WER, callsign_recall) = -0.25, corr(WER, numeric_recall) = -0.46, corr(WER, command_recall) = -0.40; the comparison model's corr(WER, callsign_recall) = -0.45; the project's fine-tune's corr(WER, callsign_recall) ≈ -0.33, corr(WER, numeric_recall) ≈ -0.49, and corr(WER, command_recall) ≈ -0.03 (essentially no relationship). That last figure is a concrete illustration of this section's opening point: the fine-tune's overall WER barely moves with whether a command verb survives, so an evaluation that only tracked aggregate WER could easily miss that its command recognition is meaningfully weaker than its WER alone would suggest. This directly supports the project's founding premise (Section 2.2) that WER alone is not a sufficient evaluation measure for ATC-specific ASR.
+
+## 5.7 Communication Characteristics and Model Performance (Research Question 3)
+
+Per-utterance WER (all three models) was joined back to `utterance_df`'s acoustic and linguistic features — duration, speech rate (masked below ~1 second per the artifact documented in Section 4.4), the SNR dynamic-range proxy, and numeric-token density — to begin investigating which characteristics are associated with transcription error.
+
+![WER vs. utterance characteristics](../res/figures/wer_vs_utterance_characteristics.png)
+
+This join is exploratory at this stage: the error analysis in 5.5 already identifies *acoustic degradation* as a trigger for the fabricated-hallucination failure mode specifically (the one concrete example found had unusually poor audio quality for its duration), which is consistent with Research Question 3's premise that acoustic quality should relate to model failure. A fuller quantitative treatment of this relationship (e.g., formal correlation/regression against each characteristic, by model and by dataset source) is deferred to the standalone evaluation pipeline described in 5.8, once it can run against the full test set rather than the 100-row prototyping subset.
+
+## 5.8 Summary, Limitations, and Next Steps
+
+Three ASR conditions were compared on the same fixed 100-utterance held-out subset of this project's test split: a generic baseline, a domain-adapted comparison model, and a project-trained fine-tune. The project's own fine-tune outperformed the much larger baseline in both domains after minimal training, while still trailing the comparison model on real audio by a wide margin — a result consistent with the gap in model size and training data between the two. Aviation-specific proxy metrics and a per-utterance error taxonomy both surfaced findings that a single aggregate WER number would have hidden, including two distinct Whisper hallucination patterns and a domain-gap collapse in callsign recognition sharper than the WER numbers alone suggest.
+
+**Known limitations, disclosed rather than hidden:**
+
+- The comparison model's real-audio numbers carry an unverified train/test-overlap risk (5.2); the project's own fine-tune's simulated-audio numbers aren't a fair generalization test against the comparison model for the mirror-image reason (ATCOSIM was in the fine-tune's own training data, but never in the comparison model's).
+- All aviation-entity metrics (5.6) are proxy/heuristic, since neither corpus provides ground-truth entity-span labels.
+- The scoring normalizer does not reconcile "nine" vs. "niner," or decompose alphanumeric callsigns.
+- The fine-tune used only 1,000 of the ~13,956 available training rows and 3 epochs; its exact metrics also vary slightly run to run due to GPU non-determinism (5.4).
+
+**Next steps**, in order:
+
+1. **Standalone ASR training/evaluation pipeline.** Promote this notebook's training and evaluation loop into reusable `ASRTrainingPipeline`/`ASREvaluationPipeline` classes in `src/`, mirroring `DataIngestPipeline`'s pattern (Section 3.5) — invokable from the command line, writing per-epoch checkpoints and structured evaluation outputs (per-utterance scores, summary tables, figures) to `res/`, the same way `scripts/run_ingest.py` (5.1) already does for data curation.
+2. **Aviation Information Extraction (Research Question 2).** Use an LLM to assist in curating aviation entity labels (callsigns, commands, altitudes, headings, frequencies) against a small manually-reviewed subset, then train a Named Entity Recognition (NER) model on the result, replacing the proxy metrics in 5.6 with real entity-level precision/recall/F1.
+3. **Standalone NER training/evaluation pipeline**, following the same reusable, notebook-free pattern as items 1 and the existing data-ingest pipeline.
+4. **Streamlit prototype application** (Section 2.1), integrating the trained ASR and NER pipelines into the real-time ATC audio analysis tool this project set out to build.
+
+---
+
 # References
 
 ATCO2 Project. (n.d.). *ATCO2: Automatic collection and processing of voice data from air-traffic communications*. https://www.atco2.org/
@@ -440,6 +551,10 @@ ATCO2 Project. (n.d.). *ATCO2: Automatic collection and processing of voice data
 Hofbauer, K., Petrik, S., & Hering, H. (2008). The ATCOSIM corpus of non-prompted clean air traffic control speech. In *Proceedings of the Sixth International Conference on Language Resources and Evaluation (LREC'08)*. European Language Resources Association.
 
 jacktol. (n.d.). *ATC-ASR-Dataset* [Data set]. Hugging Face. https://huggingface.co/datasets/jacktol/ATC-ASR-Dataset
+
+jacktol. (n.d.). *whisper-medium.en-fine-tuned-for-ATC* [Model]. Hugging Face. https://huggingface.co/jacktol/whisper-medium.en-fine-tuned-for-ATC
+
+Jitsi. (n.d.). *jiwer: Evaluate your speech-to-text transcriptions* [Computer software]. GitHub. https://github.com/jitsi/jiwer
 
 jlvdoorn. (n.d.). *atco2-asr* [Data set]. Hugging Face. https://huggingface.co/datasets/jlvdoorn/atco2-asr
 
@@ -449,4 +564,10 @@ Lhoest, Q., Villanova del Moral, A., Jernite, Y., Thakur, A., von Platen, P., Pa
 
 McFee, B., Raffel, C., Liang, D., Ellis, D. P. W., McVicar, M., Battenberg, E., & Nieto, O. (2015). librosa: Audio and music signal analysis in Python. In K. Huff & J. Bergstra (Eds.), *Proceedings of the 14th Python in Science Conference* (pp. 18–24).
 
+metawhisp. (n.d.). *Whisper repeating word loop fix*. https://metawhisp.com/blog/whisper-repeating-word-loop-fix/
+
+Radford, A., Kim, J. W., Xu, T., Brockman, G., McLeavey, C., & Sutskever, I. (2022). *Robust speech recognition via large-scale weak supervision* (arXiv:2212.04356). arXiv. https://arxiv.org/abs/2212.04356
+
 University of West Bohemia. (n.d.). *UWB ATC Corpus* [Data set]. LINDAT/CLARIAH-CZ Repository. https://lindat.mff.cuni.cz/repository/xmlui/handle/11858/00-097C-0000-0001-CCA1-0
+
+Wolf, T., Debut, L., Sanh, V., Chaumond, J., Delangue, C., Moi, A., Cistac, P., Rault, T., Louf, R., Funtowicz, M., Davison, J., Shleifer, S., von Platen, P., Ma, C., Jernite, Y., Plu, J., Xu, C., Le Scao, T., Gugger, S., … Rush, A. M. (2020). Transformers: State-of-the-art natural language processing. In *Proceedings of the 2020 Conference on Empirical Methods in Natural Language Processing: System Demonstrations* (pp. 38–45). Association for Computational Linguistics.
