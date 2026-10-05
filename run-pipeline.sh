@@ -3,8 +3,8 @@
 # stage (data ingest, training, inference, ...), whether to run it and what
 # arguments to pass to its underlying script, then invokes it.
 #
-# Only the data ingest stage is implemented so far (scripts/run_ingest.py);
-# the others are stubbed here so the prompt flow doesn't need to change
+# The data ingest (scripts/run_ingest.py) and NER annotation
+# (scripts/run_ner_annotate.py) stages are implemented so far; the others are stubbed here so the prompt flow doesn't need to change
 # shape once they exist -- adding one is just filling in its run_* function.
 #
 # Usage:
@@ -23,6 +23,10 @@ PIPELINE_LOG_LEVEL="INFO"
 # transformers, jiwer, ...) are installed into -- matches the notebooks'
 # kernelspec `display_name`. Override if you use a different env name.
 CONDA_ENV_NAME="${PIPELINE_CONDA_ENV:-data-science}"
+
+# The NER annotation stage serves an LLM with vLLM, which pins its own torch, so it
+# runs under a separate interpreter from CONDA_ENV_NAME. Override if yours lives elsewhere.
+NER_VLLM_PYTHON="${PIPELINE_NER_PYTHON:-$HOME/venvs/vllm/bin/python}"
 
 # Best-effort: activate CONDA_ENV_NAME so every stage below gets the right
 # interpreter/packages regardless of what environment this script happened
@@ -113,6 +117,35 @@ run_data_ingest() {
     python3 "$REPO_ROOT/scripts/run_ingest.py" "${args[@]}"
 }
 
+# LLM NER annotation of the full corpus. Resumable: re-running continues from the cache, so it is safe to
+# interrupt. The 9B preset takes roughly 7 hours on the 8 GB dev GPU, so the default answer is no.
+run_ner_annotation() {
+    echo
+    echo "--- Stage: NER Annotation (LLM) ---"
+    if ! prompt_yes_no "Run the LLM NER annotation stage? (long; resumable)" "n"; then
+        echo "Skipping NER annotation."
+        return 0
+    fi
+    if [[ ! -x "$NER_VLLM_PYTHON" ]]; then
+        echo "vLLM interpreter not found at $NER_VLLM_PYTHON (set PIPELINE_NER_PYTHON). Skipping."
+        return 0
+    fi
+
+    local preset limit dry=0
+    preset=$(prompt_value "Model preset (9b = accurate, ~7 h; 4b = fast, less accurate)" "9b")
+    limit=$(prompt_value "Max utterances to annotate this run (blank = all remaining)" "")
+    prompt_yes_no "Dry run only (report pool size, cache state, time estimate)?" "y" && dry=1
+
+    local args=(--preset "$preset" --log-level "$PIPELINE_LOG_LEVEL")
+    [[ -n "$PIPELINE_DATA_DIR" ]] && args+=(--data-dir "$PIPELINE_DATA_DIR")
+    [[ -n "$limit" ]] && args+=(--limit "$limit")
+    [[ "$dry" -eq 1 ]] && args+=(--dry-run)
+
+    echo
+    echo "Running: $NER_VLLM_PYTHON scripts/run_ner_annotate.py ${args[*]}"
+    "$NER_VLLM_PYTHON" "$REPO_ROOT/scripts/run_ner_annotate.py" "${args[@]}"
+}
+
 # Purge raw HuggingFace download caches via --purge-only (no pipeline re-run).
 # Called only after all pipeline stages complete so training/inference can still
 # read the WAV files during their runs.
@@ -158,6 +191,7 @@ main() {
     echo "=== ATC Capstone Pipeline Driver ==="
     activate_conda_env
     run_data_ingest
+    run_ner_annotation
     run_training
     run_inference
     run_purge_raw
