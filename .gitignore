@@ -56,3 +56,6 @@ Thumbs.db
 .vscode/
 models/
 ~$*.*
+
+# --- Run logs (training / annotation runs write here) ---
+res/logs/

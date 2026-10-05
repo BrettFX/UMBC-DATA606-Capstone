@@ -12,7 +12,9 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
 import time
+from collections import Counter
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -61,6 +63,13 @@ def load_cache(path: Path) -> dict[str, dict]:
         return {r["utterance_id"]: r for r in map(json.loads, (line for line in f if line.strip()))}
 
 
+def _write_progress(path: Path, **fields) -> None:
+    """Atomically replace the progress file a dashboard polls (never leaves a half-written file)."""
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(fields))
+    os.replace(tmp, path)
+
+
 def run_annotation(backend: Backend, pool: pd.DataFrame, out_dir: Path, config: AnnotationConfig, *,
                    chunk_size: int = 256, limit: int | None = None, seed: int = 42) -> Path:
     """Annotate `pool` chunk by chunk into `out_dir/annotations_<signature>.jsonl`; returns that path.
@@ -80,26 +89,50 @@ def run_annotation(backend: Backend, pool: pd.DataFrame, out_dir: Path, config: 
 
     started = datetime.now(timezone.utc).isoformat()
     system_prompt, t_start = PROMPTS[config.prompt_version], time.perf_counter()
-    done = 0
+    done, chunk_secs = 0, []
+    progress_path = out_dir / f"progress_{sig}.json"
+
+    def report(status: str) -> None:
+        rows = list(cached.values())
+        rate = done / max(time.perf_counter() - t_start, 1e-9)
+        _write_progress(
+            progress_path, status=status, signature=sig, model=config.model, pid=os.getpid(),
+            pool_size=len(pool), annotated=len(rows), this_run_done=done, this_run_total=len(todo),
+            rate_utt_per_s=rate, eta_seconds=(len(todo) - done) / rate if done else None,
+            chunk_seconds=chunk_secs[-60:], started_utc=started, updated_utc=datetime.now(timezone.utc).isoformat(),
+            ok_rate=sum(r["ok"] for r in rows) / max(len(rows), 1),
+            retry_rate=sum(r["n_rounds"] > 1 for r in rows) / max(len(rows), 1),
+            labels=dict(Counter(e["label"] for r in rows for e in r["entities"])))
+
+    report("running")
     for lo in range(0, len(todo), chunk_size):
         chunk = todo.iloc[lo:lo + chunk_size]
         t0 = time.perf_counter()
-        result = annotate_all(
-            backend, dict(zip(chunk["utterance_id"], chunk["transcript_normalized"])), config.use_hints,
-            config.max_rounds, check_missed=config.check_missed, postprocess=config.postprocess,
-            system_prompt=system_prompt)
+        try:
+            result = annotate_all(
+                backend, dict(zip(chunk["utterance_id"], chunk["transcript_normalized"])), config.use_hints,
+                config.max_rounds, check_missed=config.check_missed, postprocess=config.postprocess,
+                system_prompt=system_prompt)
+        except BaseException:
+            report("error")  # the dashboard shows the failure; the cache still holds every finished chunk
+            raise
         with open(path, "a") as f:  # the chunk is written only once it is complete
             for row in chunk.itertuples():
-                f.write(json.dumps({"utterance_id": row.utterance_id, "text": row.transcript_normalized,
-                                    "dataset_split": row.dataset_split, "dataset_source": row.dataset_source,
-                                    **result[row.utterance_id]}) + "\n")
+                rec = {"utterance_id": row.utterance_id, "text": row.transcript_normalized,
+                       "dataset_split": row.dataset_split, "dataset_source": row.dataset_source,
+                       **result[row.utterance_id]}
+                cached[row.utterance_id] = rec
+                f.write(json.dumps(rec) + "\n")
             f.flush()
         done += len(chunk)
+        chunk_secs.append(round(time.perf_counter() - t0, 1))
+        report("running")
         rate = done / (time.perf_counter() - t_start)
         logger.info("%d/%d this run (%.2f utt/s, ETA %.0f min); chunk took %.0fs", done, len(todo), rate,
                     (len(todo) - done) / rate / 60, time.perf_counter() - t0)
 
     final = load_cache(path)
+    report("finished")
     manifest_path.write_text(json.dumps({
         "signature": sig, "config": asdict(config), "pool_size": len(pool), "annotated": len(final),
         "complete": len(final) >= len(pool), "seed": seed, "chunk_size": chunk_size,

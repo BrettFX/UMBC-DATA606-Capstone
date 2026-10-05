@@ -3,8 +3,8 @@
 # stage (data ingest, training, inference, ...), whether to run it and what
 # arguments to pass to its underlying script, then invokes it.
 #
-# The data ingest (scripts/run_ingest.py) and NER annotation
-# (scripts/run_ner_annotate.py) stages are implemented so far; the others are stubbed here so the prompt flow doesn't need to change
+# The data ingest (scripts/run_ingest.py), NER annotation (scripts/run_ner_annotate.py) and ASR
+# training (scripts/run_asr_train.py) stages are implemented so far; the others are stubbed here so the prompt flow doesn't need to change
 # shape once they exist -- adding one is just filling in its run_* function.
 #
 # Usage:
@@ -165,15 +165,31 @@ run_purge_raw() {
     python3 "$REPO_ROOT/scripts/run_ingest.py" "${args[@]}"
 }
 
-# TODO: implement the training stage. For now, just prompt and skip.
+# ASR fine-tuning (Whisper) on the full training split, then test-set scoring. Needs most of an 8 GB GPU, so
+# run_asr_train.py refuses to start while another job (e.g. NER annotation) is using it. Resumable.
 run_training() {
     echo
-    echo "--- Stage: Model Training ---"
-    if ! prompt_yes_no "Run the training pipeline? (not yet implemented)" "n"; then
+    echo "--- Stage: Model Training (ASR) ---"
+    if ! prompt_yes_no "Run the ASR fine-tuning pipeline? (about 2-3 hours for whisper-small.en)" "n"; then
         echo "Skipping training."
         return 0
     fi
-    echo "Training pipeline isn't implemented yet -- nothing to run. Skipping."
+
+    local model epochs limit dry=0
+    model=$(prompt_value "Checkpoint to fine-tune (whisper-small.en fits 8 GB; medium.en does not)" "openai/whisper-small.en")
+    epochs=$(prompt_value "Epochs" "3")
+    limit=$(prompt_value "Train on a stratified sample of this many rows (blank = the full train split)" "")
+    prompt_yes_no "Dry run only (report sizes and a time estimate)?" "y" && dry=1
+
+    local args=(--model "$model" --epochs "$epochs" --log-level "$PIPELINE_LOG_LEVEL")
+    [[ -n "$PIPELINE_DATA_DIR" ]] && args+=(--data-dir "$PIPELINE_DATA_DIR")
+    [[ -n "$limit" ]] && args+=(--train-limit "$limit")
+    [[ "$dry" -eq 1 ]] && args+=(--dry-run)
+
+    echo
+    echo "Using python3: $(command -v python3)"
+    echo "Running: python3 scripts/run_asr_train.py ${args[*]}"
+    python3 "$REPO_ROOT/scripts/run_asr_train.py" "${args[@]}"
 }
 
 # TODO: implement the inference stage. For now, just prompt and skip.

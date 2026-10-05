@@ -105,6 +105,9 @@ def test_run_annotation_checkpoints_resumes_and_writes_manifest(tmp_path):
     assert len(lines) == len(set(lines)) == 3  # no utterance written twice
     manifest = json.loads((tmp_path / f"manifest_{config.signature()}.json").read_text())
     assert manifest["complete"] and manifest["annotated"] == 3 and manifest["config"]["model"] == "fake/model"
+    progress = json.loads((tmp_path / f"progress_{config.signature()}.json").read_text())
+    assert progress["status"] == "finished" and progress["annotated"] == 3 and progress["this_run_done"] == 1
+    assert progress["labels"] == {} and len(progress["chunk_seconds"]) == 1  # the fake model labels nothing
     # a finished run asks the model for nothing
     backend3 = FakeBackend({})
     run_annotation(backend3, pool, tmp_path, config)
