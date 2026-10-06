@@ -44,6 +44,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     common(up, "Folder for this upload (default: a UTC timestamp).")
     up.add_argument("--variants", nargs="+", default=None, help="Only these local model directories (e.g. spacy-balanced).")
     up.add_argument("--set-latest", action="store_true", help="Also make this run the model's `latest/`.")
+    up.add_argument("--skip-if-unchanged", action="store_true",
+                    help="Do nothing if the model files already match the current `latest/` run (avoids duplicate runs).")
     up.add_argument("--overwrite", action="store_true", help="Allow writing into a run prefix that already has objects.")
     up.add_argument("--yes", action="store_true", help="Actually upload. Without it nothing is sent.")
 
@@ -90,6 +92,12 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         run_id = args.run_id or artifacts.new_run_id()
         dest = f"{prefix}/{run_id}"
+        manifest = artifacts.build_manifest(args.task, run_id, items, REPO_ROOT, args.model_name)
+        if args.skip_if_unchanged:
+            same = artifacts.unchanged_vs_latest(client, f"{prefix}/latest", manifest)
+            if same:
+                logger.info("%s/%s is up to date: its model files match latest/ (run %s); nothing to upload.", args.task, args.model_name, same)
+                return 0
         for i in items:
             logger.info("%10.1f MB  %s", i.size / 1e6, i.rel_key)
         logger.info("%d files, %.1f MB  ->  %s/%s", len(items), sum(i.size for i in items) / 1e6, dest,
@@ -97,7 +105,6 @@ def main(argv: list[str] | None = None) -> int:
         if not args.yes:
             logger.info("dry run: nothing uploaded. Re-run with --yes to upload.")
             return 0
-        manifest = artifacts.build_manifest(args.task, run_id, items, REPO_ROOT, args.model_name)
         n = artifacts.upload(items, manifest, dest, client, overwrite=args.overwrite)
         logger.info("uploaded %d objects to %s/", n, dest)
         if args.set_latest:

@@ -31,3 +31,22 @@ python scripts/run_ingest.py --purge-raw         # delete data/raw/<source>/ aft
 ```
 
 See `python scripts/run_ingest.py --help` for all options.
+
+## Getting and publishing the trained models (S3)
+
+The best ASR and NER models are stored in S3 at
+`s3://endurasoft-dev-ml-ops/ml-tasks/<task>/<model-name>/<run-id>/`, with a `latest/` copy of the
+run that inference should use (for example `ml-tasks/asr/lora-whisper-medium-en/latest/` and
+`ml-tasks/ner/spacy-balanced/latest/`). Two driver scripts wrap `scripts/model_store.py`; they need AWS
+credentials (environment or `~/.aws`) and are safe to re-run.
+
+```bash
+./download-models.sh               # set up a new device: latest ASR + NER into models/ (checksums verified)
+./download-models.sh --only ner    # one task; --dry-run shows the plan; --run-id X fetches a specific run
+./upload-models.sh                 # publish the current best models as new runs and update latest (asks first)
+./upload-models.sh --dry-run       # show the plan only; a model that already matches latest is skipped
+```
+
+Which local models count as "the best" is a short list in `scripts/lib/model_common.sh`; change a row
+there when a better model replaces one. `python scripts/model_store.py --help` has the lower-level commands
+(`list`, `promote`, per-run `upload`/`download`).

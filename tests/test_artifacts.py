@@ -205,3 +205,17 @@ def test_download_detects_a_corrupted_object(tmp_path):
     s3.objects["ml-tasks/ner/spacy-balanced/run1/spacy/model-best/ner/model"] = b"y"  # the original is b"x": same size, wrong checksum
     with pytest.raises(OSError, match="checksum mismatch"):
         artifacts.download(s3, "s3://bucket/ml-tasks/ner/spacy-balanced/run1", "ner", tmp_path / "device")
+
+
+def test_unchanged_vs_latest_compares_model_files_only(tmp_path):
+    s3, repo, items = uploaded_run(tmp_path, run="run1")
+    prefix = "ml-tasks/ner/spacy-balanced"
+    artifacts.copy_prefix(s3, "bucket", f"{prefix}/run1", f"{prefix}/latest", replace=True)
+    latest = f"s3://bucket/{prefix}/latest"
+    fresh = lambda: artifacts.build_manifest("ner", "run2", artifacts.collect("ner", repo, ["spacy"]), repo, "spacy-balanced")
+    assert artifacts.unchanged_vs_latest(s3, latest, fresh()) == "run1"  # identical model files
+    (repo / "models/ner/spacy/results.json").write_text('{"f1": 0.9}')  # a metrics file changed: still the same model
+    assert artifacts.unchanged_vs_latest(s3, latest, fresh()) == "run1"
+    (repo / "models/ner/spacy/model-best/ner/model").write_text("retrained")  # the weights changed: a new model
+    assert artifacts.unchanged_vs_latest(s3, latest, fresh()) is None
+    assert artifacts.unchanged_vs_latest(s3, "s3://bucket/ml-tasks/ner/never-uploaded/latest", fresh()) is None

@@ -117,6 +117,25 @@ def upload(items: list[Item], manifest: dict, dest_uri: str, client, *, overwrit
 DEFAULT_BASE = "s3://endurasoft-dev-ml-ops/ml-tasks"
 
 
+_MODEL_PARTS = ("/final/", "/final-adapter/", "/model-best/")
+
+
+def unchanged_vs_latest(client, latest_uri: str, manifest: dict) -> str | None:
+    """The run id `latest/` already holds if its model files match `manifest`'s checksums, else None.
+
+    Only the model weights and configs are compared (keys under final/, final-adapter/ or model-best/), so
+    regenerating a metrics table or results file does not count as a new model.
+    """
+    bucket, prefix = split_s3_uri(latest_uri)
+    try:
+        remote = json.loads(client.get_object(Bucket=bucket, Key=f"{prefix}/manifest.json")["Body"].read())
+    except Exception:  # no latest yet (or no manifest): treat as changed
+        return None
+    pick = lambda m: {f["key"]: f["sha256"] for f in m["files"] if any(part in "/" + f["key"] for part in _MODEL_PARTS)}
+    local_files, remote_files = pick(manifest), pick(remote)
+    return remote.get("run_id") if local_files and local_files == remote_files else None
+
+
 def model_prefix(base: str, task: str, model_name: str) -> str:
     """`s3://bucket/ml-tasks` + task + model name -> the S3 URI that holds this model's runs and `latest/`."""
     return f"{base.rstrip('/')}/{task}/{model_name}"
