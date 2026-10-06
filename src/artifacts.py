@@ -1,8 +1,11 @@
-"""Collect trained-model artifacts and upload them to S3 under versioned, non-overwriting prefixes.
+"""Collect trained-model artifacts and move them to and from S3 under versioned, labeled prefixes.
 
-Layout: s3://<bucket>/<base>/<task-folder>/<run-id>/<model-name>/<files...> plus a manifest.json at the run
-level. A fresh run-id per upload means a new model never silently replaces an earlier one, and `upload`
-refuses to write into a prefix that already holds objects. Optimizer checkpoints are never included.
+Layout: s3://<bucket>/<base>/<task>/<model-name>/<run-id>/<files...> plus a manifest.json (checksums, run id,
+git commit) at the run level, and a `latest/` copy of whichever run inference should use. A fresh run-id per
+upload means a new model never silently replaces an earlier one; `upload` refuses a prefix that already holds
+objects, and `latest/` changes only through an explicit promote. `download` restores files to the same local
+paths the repo uses (models/, models/ner/, data/processed/...), so a new device needs no configuration.
+Optimizer checkpoints are never included.
 """
 
 from __future__ import annotations
@@ -75,12 +78,12 @@ def _sha256(path: Path) -> str:
     return h.hexdigest()
 
 
-def build_manifest(task: str, run_id: str, items: list[Item], repo_root: Path) -> dict:
+def build_manifest(task: str, run_id: str, items: list[Item], repo_root: Path, model_name: str | None = None) -> dict:
     try:
         commit = subprocess.run(["git", "-C", str(repo_root), "rev-parse", "HEAD"], capture_output=True, text=True, timeout=10).stdout.strip()
     except (OSError, subprocess.SubprocessError):
         commit = ""
-    return {"task": task, "run_id": run_id, "git_commit": commit, "created_utc": datetime.now(timezone.utc).isoformat(),
+    return {"task": task, "model_name": model_name, "run_id": run_id, "git_commit": commit, "created_utc": datetime.now(timezone.utc).isoformat(),
             "files": [{"key": i.rel_key, "bytes": i.size, "sha256": _sha256(i.source)} for i in items]}
 
 
@@ -109,3 +112,98 @@ def upload(items: list[Item], manifest: dict, dest_uri: str, client, *, overwrit
     client.put_object(Bucket=bucket, Key=f"{prefix}/manifest.json", Body=json.dumps(manifest, indent=2).encode(),
                       ContentType="application/json")
     return len(items) + 1
+
+
+DEFAULT_BASE = "s3://endurasoft-dev-ml-ops/ml-tasks"
+
+
+def model_prefix(base: str, task: str, model_name: str) -> str:
+    """`s3://bucket/ml-tasks` + task + model name -> the S3 URI that holds this model's runs and `latest/`."""
+    return f"{base.rstrip('/')}/{task}/{model_name}"
+
+
+def list_keys(client, bucket: str, prefix: str) -> dict[str, int]:
+    """Every object under `prefix` as {key relative to prefix: size}, following pagination."""
+    out, token = {}, None
+    while True:
+        page = client.list_objects_v2(Bucket=bucket, Prefix=prefix, **({"ContinuationToken": token} if token else {}))
+        out.update({o["Key"][len(prefix):]: o["Size"] for o in page.get("Contents", [])})
+        if not page.get("IsTruncated"):
+            return out
+        token = page["NextContinuationToken"]
+
+
+def common_prefixes(client, bucket: str, prefix: str) -> list[str]:
+    """The immediate sub-folder names under `prefix` (which should end with '/')."""
+    out, token = [], None
+    while True:
+        page = client.list_objects_v2(Bucket=bucket, Prefix=prefix, Delimiter="/", **({"ContinuationToken": token} if token else {}))
+        out += [p["Prefix"][len(prefix):].rstrip("/") for p in page.get("CommonPrefixes", [])]
+        if not page.get("IsTruncated"):
+            return out
+        token = page["NextContinuationToken"]
+
+
+def copy_prefix(client, bucket: str, src: str, dst: str, *, replace: bool = False) -> int:
+    """Server-side copy of every object under `src` to `dst`; with `replace`, stale objects already under `dst`
+    are deleted first so the destination ends up identical to the source. Returns the objects copied."""
+    keys = list_keys(client, bucket, src + "/")
+    if not keys:
+        raise FileNotFoundError(f"nothing under s3://{bucket}/{src}/")
+    if replace:
+        stale = list(list_keys(client, bucket, dst + "/"))
+        for lo in range(0, len(stale), 1000):
+            client.delete_objects(Bucket=bucket, Delete={"Objects": [{"Key": f"{dst}/{k}"} for k in stale[lo:lo + 1000]]})
+    for rel in keys:
+        client.copy({"Bucket": bucket, "Key": f"{src}/{rel}"}, bucket, f"{dst}/{rel}")
+    return len(keys)
+
+
+def local_path(task: str, rel_key: str, repo_root: Path) -> Path:
+    """Where a downloaded object lives locally, matching the repo's own paths for that task."""
+    if task == "asr":
+        if rel_key.startswith("test_results/"):
+            return repo_root / "data/processed/asr_results" / rel_key.removeprefix("test_results/")
+        return repo_root / "models" / rel_key
+    if task == "ner":
+        if rel_key.startswith("data/"):
+            return repo_root / "data/processed/ner_dataset" / rel_key.removeprefix("data/")
+        return repo_root / "models/ner" / rel_key
+    raise ValueError(f"unknown task {task!r}")
+
+
+def download(client, prefix_uri: str, task: str, repo_root: Path, *, force: bool = False, dry_run: bool = False) -> list[dict]:
+    """Download one run (or `latest/`) into the repo's local layout and verify checksums against its manifest.
+
+    Files that already match are skipped. A local file that differs is a conflict and raises unless `force`.
+    Returns the plan: one dict per file with `key`, `path`, `size` and `status` (new / unchanged / conflict).
+    """
+    bucket, prefix = split_s3_uri(prefix_uri)
+    keys = list_keys(client, bucket, prefix + "/")
+    if not keys:
+        raise FileNotFoundError(f"nothing under {prefix_uri}/")
+    manifest = json.loads(client.get_object(Bucket=bucket, Key=f"{prefix}/manifest.json")["Body"].read()) if "manifest.json" in keys else None
+    expected = {f["key"]: f["sha256"] for f in (manifest or {}).get("files", [])}
+    plan = []
+    for rel, size in keys.items():
+        if rel == "manifest.json":
+            continue
+        path = local_path(task, rel, repo_root)
+        status = "new"
+        if path.exists():
+            same = path.stat().st_size == size and (rel not in expected or _sha256(path) == expected[rel])
+            status = "unchanged" if same else "conflict"
+        plan.append({"key": rel, "path": path, "size": size, "status": status})
+    conflicts = [p for p in plan if p["status"] == "conflict"]
+    if conflicts and not force:
+        raise FileExistsError(f"{len(conflicts)} local file(s) differ from the download, e.g. {conflicts[0]['path']}; pass --force to overwrite")
+    if dry_run:
+        return plan
+    for p in plan:
+        if p["status"] == "unchanged":
+            continue
+        p["path"].parent.mkdir(parents=True, exist_ok=True)
+        client.download_file(bucket, f"{prefix}/{p['key']}", str(p["path"]))
+        if p["key"] in expected and _sha256(p["path"]) != expected[p["key"]]:
+            raise OSError(f"checksum mismatch after downloading {p['key']}")
+    return plan

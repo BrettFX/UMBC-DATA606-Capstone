@@ -11,18 +11,49 @@ import artifacts  # noqa: E402
 
 
 class FakeS3:
-    def __init__(self, existing: list[str] | None = None):
-        self.existing, self.uploaded, self.bodies = existing or [], [], {}
+    """In-memory S3: paginates listings (3 keys per page), supports copy/delete/download like the real client."""
 
-    def list_objects_v2(self, Bucket, Prefix, MaxKeys):
-        return {"KeyCount": sum(k.startswith(Prefix) for k in self.existing)}
+    PAGE = 3
+
+    def __init__(self, existing: list[str] | None = None):
+        self.objects = {k: b"" for k in (existing or [])}
+        self.uploaded, self.bodies = [], {}
+
+    def list_objects_v2(self, Bucket, Prefix="", Delimiter=None, ContinuationToken=None, MaxKeys=None):
+        keys = sorted(k for k in self.objects if k.startswith(Prefix))
+        if Delimiter:
+            folders = sorted({Prefix + k[len(Prefix):].split(Delimiter)[0] + Delimiter for k in keys if Delimiter in k[len(Prefix):]})
+            return {"CommonPrefixes": [{"Prefix": f} for f in folders], "KeyCount": len(folders), "IsTruncated": False}
+        start = int(ContinuationToken or 0)
+        page = keys[start:start + (MaxKeys or self.PAGE)]
+        more = start + len(page) < len(keys)
+        out = {"Contents": [{"Key": k, "Size": len(self.objects[k])} for k in page], "KeyCount": len(page), "IsTruncated": more}
+        if more:
+            out["NextContinuationToken"] = str(start + len(page))
+        return out
 
     def upload_file(self, path, bucket, key):
+        self.objects[key] = pathlib.Path(path).read_bytes()
         self.uploaded.append((bucket, key))
 
     def put_object(self, Bucket, Key, Body, ContentType):
+        self.objects[Key] = Body
         self.uploaded.append((Bucket, Key))
         self.bodies[Key] = Body
+
+    def get_object(self, Bucket, Key):
+        import io
+        return {"Body": io.BytesIO(self.objects[Key])}
+
+    def copy(self, source, bucket, key):
+        self.objects[key] = self.objects[source["Key"]]
+
+    def delete_objects(self, Bucket, Delete):
+        for o in Delete["Objects"]:
+            self.objects.pop(o["Key"], None)
+
+    def download_file(self, bucket, key, path):
+        pathlib.Path(path).write_bytes(self.objects[key])
 
 
 def touch(path: pathlib.Path, text="x"):
@@ -109,3 +140,68 @@ def test_split_s3_uri():
     assert artifacts.split_s3_uri("s3://b/ml-tasks/ner/") == ("b", "ml-tasks/ner")
     with pytest.raises(ValueError):
         artifacts.split_s3_uri("https://example.com/x")
+
+
+def uploaded_run(tmp_path, task="ner", model="spacy-balanced", run="run1", variants=("spacy",), s3=None):
+    """Upload a fake repo's artifacts as <task>/<model>/<run> and return (s3, repo, items)."""
+    repo = make_repo(tmp_path)
+    items = artifacts.collect(task, repo, list(variants))
+    s3 = s3 or FakeS3()
+    prefix = artifacts.model_prefix("s3://bucket/ml-tasks", task, model)
+    manifest = artifacts.build_manifest(task, run, items, repo, model)
+    artifacts.upload(items, manifest, f"{prefix}/{run}", s3)
+    return s3, repo, items
+
+
+def test_model_prefix_and_pagination_and_common_prefixes(tmp_path):
+    assert artifacts.model_prefix("s3://b/ml-tasks/", "asr", "lora") == "s3://b/ml-tasks/asr/lora"
+    s3, _, items = uploaded_run(tmp_path)
+    keys = artifacts.list_keys(s3, "bucket", "ml-tasks/ner/spacy-balanced/run1/")
+    assert len(keys) == len(items) + 1 > FakeS3.PAGE  # more objects than one page, all returned
+    assert artifacts.common_prefixes(s3, "bucket", "ml-tasks/ner/spacy-balanced/") == ["run1"]
+
+
+def test_promote_makes_latest_identical_to_the_run_and_drops_stale_files(tmp_path):
+    s3, repo, _ = uploaded_run(tmp_path)
+    s3.objects["ml-tasks/ner/spacy-balanced/latest/stale-from-older-run.bin"] = b"old"
+    n = artifacts.copy_prefix(s3, "bucket", "ml-tasks/ner/spacy-balanced/run1", "ml-tasks/ner/spacy-balanced/latest", replace=True)
+    run = artifacts.list_keys(s3, "bucket", "ml-tasks/ner/spacy-balanced/run1/")
+    latest = artifacts.list_keys(s3, "bucket", "ml-tasks/ner/spacy-balanced/latest/")
+    assert n == len(run) and latest == run  # same keys and sizes; the stale object is gone
+    assert json.loads(s3.objects["ml-tasks/ner/spacy-balanced/latest/manifest.json"])["run_id"] == "run1"
+    with pytest.raises(FileNotFoundError):
+        artifacts.copy_prefix(s3, "bucket", "ml-tasks/ner/spacy-balanced/missing", "ml-tasks/ner/spacy-balanced/latest", replace=True)
+
+
+def test_local_path_matches_the_repos_own_layout(tmp_path):
+    lp = lambda task, key: artifacts.local_path(task, key, tmp_path).relative_to(tmp_path).as_posix()
+    assert lp("asr", "whisper-medium-en-atc-finetuned-full-lora/final/model.safetensors") == "models/whisper-medium-en-atc-finetuned-full-lora/final/model.safetensors"
+    assert lp("asr", "test_results/x.csv") == "data/processed/asr_results/x.csv"
+    assert lp("ner", "spacy-balanced/model-best/ner/model") == "models/ner/spacy-balanced/model-best/ner/model"
+    assert lp("ner", "data/label2id.json") == "data/processed/ner_dataset/label2id.json"
+
+
+def test_download_restores_files_skips_unchanged_and_protects_local_edits(tmp_path):
+    s3, _, items = uploaded_run(tmp_path / "src")
+    new_device = tmp_path / "device"
+    uri = "s3://bucket/ml-tasks/ner/spacy-balanced/run1"
+    plan = artifacts.download(s3, uri, "ner", new_device, dry_run=True)
+    assert {p["status"] for p in plan} == {"new"} and not (new_device / "models").exists()  # a dry run writes nothing
+    plan = artifacts.download(s3, uri, "ner", new_device)
+    assert len(plan) == len(items) and (new_device / "models/ner/spacy/results.json").read_text() == "{}"
+    assert {p["status"] for p in artifacts.download(s3, uri, "ner", new_device)} == {"unchanged"}  # second run: nothing to do
+    edited = new_device / "models/ner/spacy/results.json"
+    edited.write_text("{\"edited\": true}")
+    with pytest.raises(FileExistsError):
+        artifacts.download(s3, uri, "ner", new_device)
+    assert edited.read_text() == '{"edited": true}'  # not overwritten without --force
+    artifacts.download(s3, uri, "ner", new_device, force=True)
+    assert edited.read_text() == "{}"
+
+
+def test_download_detects_a_corrupted_object(tmp_path):
+    s3, _, _ = uploaded_run(tmp_path / "src")
+    s3.objects["ml-tasks/ner/spacy-balanced/run1/spacy/results.json"] = b"{}"  # same size as the original, different bytes below
+    s3.objects["ml-tasks/ner/spacy-balanced/run1/spacy/model-best/ner/model"] = b"y"  # the original is b"x": same size, wrong checksum
+    with pytest.raises(OSError, match="checksum mismatch"):
+        artifacts.download(s3, "s3://bucket/ml-tasks/ner/spacy-balanced/run1", "ner", tmp_path / "device")
