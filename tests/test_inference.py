@@ -57,3 +57,34 @@ def test_spacy_ner_wrapper_predicts_spans():
     assert ("descend", "COMMAND") in {(e["text"], e["label"]) for e in ents}
     assert all(e["span"][1] > e["span"][0] for e in ents)
     assert len(ner.predict_many(["roger", "contact rhein one three two decimal four"])) == 2
+
+
+def test_pick_window_chooses_the_smallest_window_that_fits():
+    from asr.inference import DYNAMIC_WINDOWS, pick_window
+
+    assert [pick_window(d, DYNAMIC_WINDOWS) for d in (0.5, 10.0, 10.1, 15.0, 20.5, 30.0, 31.0)] == [10, 10, 15, 15, 30, 30, None]
+
+
+def test_dynamic_windows_work_for_both_backends_and_reject_overlong_clips(tmp_path):
+    pytest.importorskip("faster_whisper")
+    from asr.inference import CT2Transcriber, DYNAMIC_WINDOWS, HFTranscriber, convert_to_ct2
+
+    d = tiny_dir(tmp_path)
+    hf = HFTranscriber(d, device="cpu", threads=2, windows=DYNAMIC_WINDOWS)
+    clips = [np.zeros(16_000 * s, dtype=np.float32) for s in (3, 12, 25)]  # one clip in each of the 10, 15 and 30 s windows
+    assert all(isinstance(hf.transcribe(c), str) for c in clips)
+    with pytest.raises(ValueError):
+        hf.transcribe(np.zeros(16_000 * 35, dtype=np.float32))
+    ct2 = CT2Transcriber(convert_to_ct2(d, tmp_path / "ct2", "int8"), threads=2, windows=DYNAMIC_WINDOWS)
+    assert all(isinstance(ct2.transcribe(c), str) for c in clips)
+    assert isinstance(ct2.transcribe(np.zeros(16_000 * 35, dtype=np.float32)), str)  # longer than any window: library fallback
+
+
+def test_best_transcriber_uses_ctranslate2_int8_with_dynamic_windows_on_cpu(tmp_path):
+    pytest.importorskip("faster_whisper")
+    from asr.inference import CT2Transcriber, DYNAMIC_WINDOWS, best_transcriber
+
+    asr = best_transcriber(tiny_dir(tmp_path), device="cpu", threads=2)
+    assert isinstance(asr, CT2Transcriber) and asr.windows == DYNAMIC_WINDOWS
+    assert (tmp_path / "ct2-int8" / "model.bin").exists()  # the converted copy is created next to the model
+    assert isinstance(asr.transcribe(np.zeros(16_000, dtype=np.float32)), str)

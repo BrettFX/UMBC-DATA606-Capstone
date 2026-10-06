@@ -56,3 +56,24 @@ def test_save_run_writes_json_latest_and_baseline_report(tmp_path):
     assert path.exists() and (tmp_path / "latest.md").read_text() == report and (tmp_path / "BASELINE.md").exists()
     b.save_run(tmp_path, "r2", "experiment", "t2", INFO, {}, {"medium/hf-fp32/cpu-4t": result(6.0)}, "other")
     assert (tmp_path / "BASELINE.md").read_text() == report  # only a baseline-tagged run updates BASELINE.md
+
+
+def test_report_compares_a_dynamic_window_config_with_its_full_window_twin():
+    results = {"medium/ct2-int8-dynwin/cpu-4t": result(0.8, wer=0.06), "medium/brand-new/cpu-4t": result(1.0)}
+    baseline = {"medium/ct2-int8/cpu-4t": {"median_s": "2.5", "wer": "0.05"}}
+    text = b.render_report("r9", "tag", INFO, results, baseline)
+    line = next(ln for ln in text.splitlines() if ln.startswith("| medium/ct2-int8-dynwin/cpu-4t"))
+    assert "-68% latency" in line and "+1.0 pts WER (vs medium/ct2-int8/cpu-4t)" in line
+    assert "new" in next(ln for ln in text.splitlines() if ln.startswith("| medium/brand-new"))
+
+
+def test_paired_wer_table_separates_a_real_difference_from_an_identical_config():
+    refs = ["contact rhein one three two"] * 60
+    hyps = {"ref": list(refs), "same": list(refs),
+            "worse": [r if i % 3 else "contact rhein one three" for i, r in enumerate(refs)]}  # one word dropped in a third of the clips
+    rows = {r["config"]: r for r in b.paired_wer_table(refs, hyps, "ref")}
+    assert rows["ref"]["wer"] == 0 and "diff" not in rows["ref"]
+    assert rows["same"]["verdict"] == "no clear difference" and rows["same"]["identical_to_ref"] == 1.0
+    assert rows["worse"]["verdict"] == "worse" and rows["worse"]["diff_lo"] > 0
+    assert rows["worse"]["wer"] == pytest.approx(20 / 300) and rows["worse"]["identical_to_ref"] == pytest.approx(2 / 3)
+    assert "worse" in b.render_paired(list(rows.values()), "ref", "title")

@@ -9,7 +9,8 @@ and is logged with hardware and version info so later improvements can be compar
     res/benchmarks/BASELINE.md                the report of the run tagged "baseline"
 
 Config names are <model>/<backend>/<device>, e.g. medium/ct2-int8/cpu-4t or medium/hf-fp16/gpu.
-    backends: hf-fp32, hf-fp16, hf-int8dyn (torch dynamic int8, CPU), ct2-int8 (CTranslate2/faster-whisper)
+    backends: hf-fp32, hf-fp16, hf-int8dyn (torch dynamic int8, CPU), ct2-int8 (CTranslate2/faster-whisper);
+    a "-dynwin" suffix (e.g. ct2-int8-dynwin) encodes each clip in the smallest of 10/15/20/30 s windows that fits it
 
 Usage:
     python scripts/benchmark_inference.py --suite quick --tag smoke
@@ -43,12 +44,19 @@ DATASET_DIR = REPO_ROOT / "data/processed/combined_dataset"
 
 SUITES = {
     "quick": ["medium/hf-fp16/gpu", "medium/ct2-int8/cpu-4t", "ner/spacy/cpu"],
+    "windows": ["medium/hf-fp16-dynwin/gpu",
+                "medium/hf-fp32-dynwin/cpu-4t", "medium/hf-int8dyn-dynwin/cpu-4t",
+                "medium/ct2-int8-dynwin/cpu-2t", "medium/ct2-int8-dynwin/cpu-4t", "medium/ct2-int8-dynwin/cpu-8t",
+                "small/hf-fp32-dynwin/cpu-4t", "small/ct2-int8-dynwin/cpu-2t", "small/ct2-int8-dynwin/cpu-4t", "small/ct2-int8-dynwin/cpu-8t"],
     "full": ["medium/hf-fp16/gpu",
              "medium/hf-fp32/cpu-4t", "medium/hf-fp32/cpu-8t",
              "medium/hf-int8dyn/cpu-4t", "medium/hf-int8dyn/cpu-8t",
              "medium/ct2-int8/cpu-2t", "medium/ct2-int8/cpu-4t", "medium/ct2-int8/cpu-8t",
              "small/hf-fp32/cpu-4t",
              "small/ct2-int8/cpu-2t", "small/ct2-int8/cpu-4t", "small/ct2-int8/cpu-8t",
+             "medium/hf-fp16-dynwin/gpu", "medium/hf-fp32-dynwin/cpu-4t", "medium/hf-int8dyn-dynwin/cpu-4t",
+             "medium/ct2-int8-dynwin/cpu-2t", "medium/ct2-int8-dynwin/cpu-4t", "medium/ct2-int8-dynwin/cpu-8t",
+             "small/hf-fp32-dynwin/cpu-4t", "small/ct2-int8-dynwin/cpu-2t", "small/ct2-int8-dynwin/cpu-4t", "small/ct2-int8-dynwin/cpu-8t",
              "ner/spacy/cpu"],
 }
 
@@ -90,17 +98,21 @@ def worker(key: str, samples_path: Path, warmup: int) -> dict:
         result.update(n=len(lat), median_s=float(np.median(lat)), p95_s=float(np.percentile(lat, 95)), mean_s=float(lat.mean()),
                       throughput_utt_per_s=len(texts) / batch_s)
     else:
+        from asr.inference import DYNAMIC_WINDOWS, FULL_WINDOW_S
+
         cfg = parse_config(key)
+        windows = DYNAMIC_WINDOWS if "dynwin" in cfg["backend"] else (FULL_WINDOW_S,)
         t0 = time.perf_counter()
         if cfg["backend"].startswith("hf-"):
             from asr.inference import HFTranscriber
 
             asr = HFTranscriber(MODELS[cfg["model"]], device="cuda" if cfg["gpu"] else "cpu", dtype="fp16" if "fp16" in cfg["backend"] else "fp32",
-                                int8_dynamic="int8dyn" in cfg["backend"], threads=cfg["threads"])
+                                int8_dynamic="int8dyn" in cfg["backend"], threads=cfg["threads"], windows=windows)
         else:
             from asr.inference import CT2Transcriber
 
-            asr = CT2Transcriber(CT2_DIRS[cfg["model"]], device="cuda" if cfg["gpu"] else "cpu", compute_type="int8", threads=cfg["threads"] or 0)
+            asr = CT2Transcriber(CT2_DIRS[cfg["model"]], device="cuda" if cfg["gpu"] else "cpu", compute_type="int8", threads=cfg["threads"] or 0,
+                                 windows=windows)
         result["load_s"] = time.perf_counter() - t0
         audio = samples["audio"]
         t0 = time.perf_counter()
@@ -174,7 +186,7 @@ def main() -> int:
     from benchmarking import append_history, baseline_rows, render_report, save_run, system_info
 
     configs = args.configs or SUITES[args.suite or "quick"]
-    needed = {parse_config(c)["model"] for c in configs if c.startswith(("medium/ct2", "small/ct2"))}
+    needed = {parse_config(c)["model"] for c in configs if "/ct2-" in c}
     if needed:
         from asr.inference import convert_to_ct2
 

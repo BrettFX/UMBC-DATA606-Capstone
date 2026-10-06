@@ -113,8 +113,10 @@ def render_report(run_id: str, tag: str, info: dict, results: dict[str, dict], b
                f"{wer} | {_f(r.get('load_s'), '.1f')} | {_f(r.get('warmup_s'), '.1f')} | "
                f"{_f(r.get('peak_rss_mb'), '.0f')} | {_f(r.get('gpu_peak_mb'), '.0f')} |")
         if baseline:
-            b = baseline.get(cfg)
-            row += (f" {100 * (r['median_s'] / float(b['median_s']) - 1):+.0f}% latency, {100 * (r['wer'] - float(b['wer'])):+.1f} pts WER |"
+            twin = cfg if cfg in baseline else cfg.replace("-dynwin", "")  # a dynamic-window config is compared with its full-window twin
+            b = baseline.get(twin)
+            row += (f" {100 * (r['median_s'] / float(b['median_s']) - 1):+.0f}% latency, {100 * (r['wer'] - float(b['wer'])):+.1f} pts WER"
+                    f"{'' if twin == cfg else ' (vs ' + twin + ')'} |"
                     if b and b.get("median_s") and r.get("wer") is not None and b.get("wer") not in (None, "") else " new |")
         lines.append(row)
     return "\n".join(lines) + "\n"
@@ -130,3 +132,45 @@ def save_run(out_dir: Path, run_id: str, tag: str, timestamp: str, info: dict, s
     if tag == "baseline":
         (out_dir / "BASELINE.md").write_text(report)
     return path
+
+
+def paired_wer_table(refs: list[str], hyps: dict[str, list[str]], reference: str, n_boot: int = 2000, seed: int = 0) -> list[dict]:
+    """Per-configuration WER with a bootstrap CI, plus the paired difference against `reference` on the same utterances.
+
+    Resampling utterances (the same ones for both models) tests whether a configuration really differs from the
+    reference, which a pair of single WER numbers on a few hundred utterances cannot. Also counts utterances whose
+    transcript is identical to the reference's and utterances with WER above 50% (gross failures such as hallucination).
+    """
+    import jiwer
+
+    from asr.text import normalize_for_scoring
+
+    ref = [normalize_for_scoring(r) for r in refs]
+    words = np.array([len(r.split()) for r in ref])
+    errors, texts = {}, {}
+    for cfg, hs in hyps.items():
+        texts[cfg] = [normalize_for_scoring(h) for h in hs]
+        errors[cfg] = np.array([len(h.split()) if not r else (lambda o: o.substitutions + o.deletions + o.insertions)(jiwer.process_words(r, h))
+                                for r, h in zip(ref, texts[cfg])])
+    idx = np.random.default_rng(seed).integers(0, len(ref), size=(n_boot, len(ref)))
+    w_boot = words[idx].sum(1)
+    pct = lambda x: (float(np.percentile(x, 2.5)), float(np.percentile(x, 97.5)))
+    rows = []
+    for cfg, e in errors.items():
+        lo, hi = pct(e[idx].sum(1) / w_boot)
+        row = {"config": cfg, "n": len(ref), "wer": float(e.sum() / words.sum()), "wer_lo": lo, "wer_hi": hi,
+               "bad_clips": int(((e / np.maximum(words, 1)) > 0.5).sum()), "identical_to_ref": float(np.mean([a == b for a, b in zip(texts[cfg], texts[reference])]))}
+        if cfg != reference:
+            dlo, dhi = pct((e[idx].sum(1) - errors[reference][idx].sum(1)) / w_boot)
+            row.update(diff=float((e.sum() - errors[reference].sum()) / words.sum()), diff_lo=dlo, diff_hi=dhi,
+                       verdict="better" if dhi < 0 else "worse" if dlo > 0 else "no clear difference")
+        rows.append(row)
+    return rows
+
+
+def render_paired(rows: list[dict], reference: str, title: str) -> str:
+    lines = [f"### {title}", "", f"| config | WER (95% CI) | vs {reference} (95% CI) | identical transcripts | clips with WER>50% |", "|---|---|---|---|---|"]
+    for r in rows:
+        vs = "reference" if r["config"] == reference else f"{100 * r['diff']:+.2f} pts ({100 * r['diff_lo']:+.2f}, {100 * r['diff_hi']:+.2f}): {r['verdict']}"
+        lines.append(f"| {r['config']} | {100 * r['wer']:.2f}% ({100 * r['wer_lo']:.2f}-{100 * r['wer_hi']:.2f}) | {vs} | {100 * r['identical_to_ref']:.0f}% | {r['bad_clips']} |")
+    return "\n".join(lines) + "\n"
