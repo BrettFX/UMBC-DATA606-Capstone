@@ -37,7 +37,7 @@ sys.path.insert(0, str(REPO_ROOT / "src"))
 
 MODELS = {"medium": REPO_ROOT / "models/whisper-medium-en-atc-finetuned-full-lora/final",
           "small": REPO_ROOT / "models/whisper-small-en-atc-finetuned-full/final"}
-CT2_DIRS = {"medium": REPO_ROOT / "models/ct2/medium-lora-int8", "small": REPO_ROOT / "models/ct2/small-3ep-int8"}
+CT2_DIRS = {name: path.parent / "ct2-int8" for name, path in MODELS.items()}  # converted copy next to each model
 NER_MODEL = REPO_ROOT / "models/ner/spacy-balanced/model-best"
 NER_TEXTS = REPO_ROOT / "data/processed/ner_dataset/curated/heldout.jsonl"
 DATASET_DIR = REPO_ROOT / "data/processed/combined_dataset"

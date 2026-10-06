@@ -32,17 +32,23 @@ def _tree(root: Path, rel_root: str) -> list[Item]:
     return [Item(p, f"{rel_root}/{p.relative_to(root).as_posix()}") for p in sorted(root.rglob("*")) if p.is_file()]
 
 
-def collect(task: str, repo_root: Path, variants: list[str] | None = None) -> list[Item]:
-    """Files to upload for `task` ('asr' or 'ner'): final models, their configs and scores, never checkpoints."""
+def collect(task: str, repo_root: Path, variants: list[str] | None = None, parts: list[str] | None = None) -> list[Item]:
+    """Files to upload for `task` ('asr' or 'ner'): final models, their configs and scores, never checkpoints.
+
+    `parts` (ASR only) restricts the upload to named sub-folders of each model directory, e.g. ["ct2-int8"] for the
+    CTranslate2 copy on its own (then the training configs, scores and results files are left out).
+    """
     items: list[Item] = []
     if task == "asr":
         results = repo_root / "data/processed/asr_results"
         for model_dir in sorted((repo_root / "models").glob("*-atc-finetuned-full*")):
             if variants and model_dir.name not in variants:
                 continue
-            for part in ("final", "final-adapter"):  # the merged model, and the LoRA adapters when there are any
+            for part in parts or ("final", "final-adapter"):  # the merged model, and the LoRA adapters when there are any
                 if (model_dir / part).is_dir():
                     items += _tree(model_dir / part, f"{model_dir.name}/{part}")
+            if parts:
+                continue
             items += [Item(model_dir / f, f"{model_dir.name}/{f}") for f in ("train_config.json", "train_metrics.json", "test_scores.json")
                       if (model_dir / f).exists()]
             # this model's own per-utterance test results: models/<safe>-atc-finetuned-full<tag> -> finetuned_<safe>_full<tag>.csv
@@ -50,8 +56,9 @@ def collect(task: str, repo_root: Path, variants: list[str] | None = None) -> li
             csv = results / f"finetuned_{safe}_full{tag}.csv"
             if csv.exists():
                 items.append(Item(csv, f"test_results/{csv.name}"))
-        items += [Item(results / name, f"test_results/{name}") for name in ("experiments_summary.md", "experiments_summary.csv")
-                  if (results / name).exists()]  # the cross-model comparison table, for context
+        if not parts:
+            items += [Item(results / name, f"test_results/{name}") for name in ("experiments_summary.md", "experiments_summary.csv")
+                      if (results / name).exists()]  # the cross-model comparison table, for context
     elif task == "ner":
         for model_dir in sorted((repo_root / "models" / "ner").glob("*")):
             if not model_dir.is_dir() or (variants and model_dir.name not in variants):
@@ -117,7 +124,7 @@ def upload(items: list[Item], manifest: dict, dest_uri: str, client, *, overwrit
 DEFAULT_BASE = "s3://endurasoft-dev-ml-ops/ml-tasks"
 
 
-_MODEL_PARTS = ("/final/", "/final-adapter/", "/model-best/")
+_MODEL_PARTS = ("/final/", "/final-adapter/", "/model-best/", "/ct2-int8/")
 
 
 def unchanged_vs_latest(client, latest_uri: str, manifest: dict) -> str | None:

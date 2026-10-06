@@ -41,12 +41,17 @@ run that inference should use (for example `ml-tasks/asr/lora-whisper-medium-en/
 credentials (environment or `~/.aws`) and are safe to re-run.
 
 ```bash
-./download-models.sh               # set up a new device: latest ASR + NER into models/ (checksums verified)
-./download-models.sh --only ner    # one task; --dry-run shows the plan; --run-id X fetches a specific run
+./download-models.sh --profile cpu # a device WITHOUT a GPU: CTranslate2 int8 ASR model + NER (~0.8 GB, no torch needed)
+./download-models.sh --profile gpu # a device with a GPU: full-precision ASR model + NER (~1.5 GB)
+./download-models.sh               # everything (full ASR model, CTranslate2 ASR model, NER)
+./download-models.sh --only ner    # one group (asr, asr-ct2, ner); --dry-run shows the plan; --run-id X fetches a specific run
 ./upload-models.sh                 # publish the current best models as new runs and update latest (asks first)
 ./upload-models.sh --dry-run       # show the plan only; a model that already matches latest is skipped
 ```
 
+The ASR model is published twice: the merged full-precision model (`asr/lora-whisper-medium-en`) and its
+CTranslate2 int8 conversion (`asr/lora-whisper-medium-en-ct2-int8`), which is what a CPU device runs
+(`asr.inference.best_transcriber()` picks the right one; see `res/benchmarks/EXPERIMENTS.md` for why).
 Which local models count as "the best" is a short list in `scripts/lib/model_common.sh`; change a row
 there when a better model replaces one. `python scripts/model_store.py --help` has the lower-level commands
 (`list`, `promote`, per-run `upload`/`download`).

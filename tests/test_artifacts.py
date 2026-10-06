@@ -219,3 +219,26 @@ def test_unchanged_vs_latest_compares_model_files_only(tmp_path):
     (repo / "models/ner/spacy/model-best/ner/model").write_text("retrained")  # the weights changed: a new model
     assert artifacts.unchanged_vs_latest(s3, latest, fresh()) is None
     assert artifacts.unchanged_vs_latest(s3, "s3://bucket/ml-tasks/ner/never-uploaded/latest", fresh()) is None
+
+
+def test_collect_parts_selects_only_the_ct2_folder(tmp_path):
+    repo = make_repo(tmp_path)
+    touch(repo / "models/whisper-small-en-atc-finetuned-full/ct2-int8/model.bin")
+    touch(repo / "models/whisper-small-en-atc-finetuned-full/ct2-int8/conversion.json")
+    keys = {i.rel_key for i in artifacts.collect("asr", repo, ["whisper-small-en-atc-finetuned-full"], ["ct2-int8"])}
+    assert keys == {"whisper-small-en-atc-finetuned-full/ct2-int8/model.bin", "whisper-small-en-atc-finetuned-full/ct2-int8/conversion.json"}
+    # downloaded back, they land beside the source model, where best_transcriber looks
+    assert artifacts.local_path("asr", "whisper-small-en-atc-finetuned-full/ct2-int8/model.bin", repo).relative_to(repo).as_posix() == \
+        "models/whisper-small-en-atc-finetuned-full/ct2-int8/model.bin"
+
+
+def test_unchanged_check_covers_the_ct2_folder(tmp_path):
+    repo = make_repo(tmp_path)
+    touch(repo / "models/whisper-small-en-atc-finetuned-full/ct2-int8/model.bin", "weights-v1")
+    s3, prefix = FakeS3(), "ml-tasks/asr/small-ct2-int8"
+    fresh = lambda: artifacts.build_manifest("asr", "r2", artifacts.collect("asr", repo, ["whisper-small-en-atc-finetuned-full"], ["ct2-int8"]), repo, "small-ct2-int8")
+    artifacts.upload(artifacts.collect("asr", repo, ["whisper-small-en-atc-finetuned-full"], ["ct2-int8"]), fresh(), f"s3://bucket/{prefix}/r1", s3)
+    artifacts.copy_prefix(s3, "bucket", f"{prefix}/r1", f"{prefix}/latest", replace=True)
+    assert artifacts.unchanged_vs_latest(s3, f"s3://bucket/{prefix}/latest", fresh()) is not None
+    touch(repo / "models/whisper-small-en-atc-finetuned-full/ct2-int8/model.bin", "weights-v2")  # reconverted: a new model
+    assert artifacts.unchanged_vs_latest(s3, f"s3://bucket/{prefix}/latest", fresh()) is None

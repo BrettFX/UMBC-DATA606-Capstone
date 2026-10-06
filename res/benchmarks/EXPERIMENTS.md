@@ -85,7 +85,9 @@ PyTorch dynamic int8 is both less accurate and needs 3x the memory. The small mo
 ## 6. Next ideas (not yet tried)
 
 1. Fine-tune with shorter windows (6-8 s) so the floor drops below 10 s; the encoder would shrink a further ~30-40%.
-2. Ship the CTranslate2 int8 model as an S3 artifact so CPU devices download 0.77 GB instead of 1.5 GB and need neither torch nor transformers.
+2. ~~Ship the CTranslate2 int8 model as an S3 artifact~~ (done 2026-10-06: `asr/lora-whisper-medium-en-ct2-int8`, 0.77 GB instead of 1.5 GB;
+   `./download-models.sh --profile cpu`). Verified in a clean environment with only numpy and faster-whisper (no torch or transformers):
+   the downloaded model transcribed at a median of 0.82 s and its transcripts were identical to the local model's.
 3. Measure cold start (model load 5-6 s) and keep the model in a long-lived process in the app.
 4. Benchmark on the real target devices, including 2-thread configurations, with `--tag baseline-<device>`.
 5. Streaming or chunked transcription for utterances longer than 30 s.

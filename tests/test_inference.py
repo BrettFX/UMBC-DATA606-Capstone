@@ -88,3 +88,32 @@ def test_best_transcriber_uses_ctranslate2_int8_with_dynamic_windows_on_cpu(tmp_
     assert isinstance(asr, CT2Transcriber) and asr.windows == DYNAMIC_WINDOWS
     assert (tmp_path / "ct2-int8" / "model.bin").exists()  # the converted copy is created next to the model
     assert isinstance(asr.transcribe(np.zeros(16_000, dtype=np.float32)), str)
+
+
+def test_asr_inference_imports_without_torch_or_transformers():
+    """A CPU device must be able to import the inference module without the heavy training dependencies."""
+    import subprocess
+
+    code = ("import sys; sys.path.insert(0, 'src'); import asr.inference; "
+            "assert 'torch' not in sys.modules and 'transformers' not in sys.modules and 'datasets' not in sys.modules, sorted(m for m in sys.modules if m in ('torch', 'transformers', 'datasets'))")
+    result = subprocess.run([sys.executable, "-c", code], cwd=ROOT, capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr[-500:]
+
+
+def test_lazy_asr_package_still_exposes_the_training_api():
+    import asr
+
+    assert callable(asr.train) and callable(asr.evaluate) and asr.TrainConfig.__name__ == "TrainConfig" and callable(asr.load_split)
+
+
+def test_best_transcriber_on_cpu_needs_only_the_ct2_directory_and_explains_when_it_is_missing(tmp_path):
+    pytest.importorskip("faster_whisper")
+    from asr.inference import CT2Transcriber, best_transcriber, convert_to_ct2
+
+    d = tiny_dir(tmp_path)
+    ct2 = convert_to_ct2(d, tmp_path / "somewhere" / "ct2", "int8")
+    assert (ct2 / "conversion.json").exists()  # provenance of the conversion
+    asr = best_transcriber(tmp_path / "no-hf-model-here", ct2_dir=ct2, device="cpu", threads=2)  # a device with no Hugging Face model
+    assert isinstance(asr, CT2Transcriber)
+    with pytest.raises(FileNotFoundError, match="download-models.sh --profile cpu"):
+        best_transcriber(tmp_path / "no-hf-model-here", ct2_dir=tmp_path / "missing", device="cpu")

@@ -14,6 +14,9 @@ from typing import Protocol
 
 import numpy as np
 
+REPO_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_MODEL_DIR = REPO_ROOT / "models/whisper-medium-en-atc-finetuned-full-lora/final"  # merged fp16 model (GPU / conversion source)
+DEFAULT_CT2_DIR = DEFAULT_MODEL_DIR.parent / "ct2-int8"  # CTranslate2 int8 copy: all a CPU device needs
 SAMPLE_RATE = 16_000
 MAX_NEW_TOKENS = 128  # bounds runaway repetition; the longest utterances need ~100 tokens
 
@@ -138,30 +141,48 @@ class CT2Transcriber:
 
 def convert_to_ct2(model_dir: Path | str, out_dir: Path | str, quantization: str = "int8") -> Path:
     """Convert a Hugging Face Whisper directory to CTranslate2 format (skipped if already converted)."""
-    from ctranslate2.converters import TransformersConverter
-
     model_dir, out_dir = Path(model_dir), Path(out_dir)
     if (out_dir / "model.bin").exists():
         return out_dir
+    import json
+    from datetime import datetime, timezone
+
+    import ctranslate2
+    from ctranslate2.converters import TransformersConverter
+
     extra = [f for f in ("tokenizer.json", "preprocessor_config.json") if (model_dir / f).exists()]
     TransformersConverter(str(model_dir), copy_files=extra).convert(str(out_dir), quantization=quantization)
+    (out_dir / "conversion.json").write_text(json.dumps({  # provenance: what this directory was made from
+        "source_model": model_dir.parent.name, "quantization": quantization, "ctranslate2": ctranslate2.__version__,
+        "converted_utc": datetime.now(timezone.utc).isoformat()}, indent=2))
     return out_dir
 
 
-def best_transcriber(model_dir: Path | str, *, device: str = "auto", threads: int = 4, ct2_dir: Path | str | None = None) -> Transcriber:
+def best_transcriber(model_dir: Path | str | None = None, *, device: str = "auto", threads: int = 4,
+                     ct2_dir: Path | str | None = None) -> Transcriber:
     """The fastest backend that keeps the model's accuracy, chosen from the project's benchmarks (res/benchmarks/).
 
-    GPU: PyTorch fp16 with dynamic windows. CPU: CTranslate2 int8 with dynamic windows, which on the 300-utterance
-    paired check matched the GPU model's WER (-0.25 points, 95% CI -0.70 to +0.22) at about 0.7 s per utterance on
-    4 threads for the medium model (vs ~5 s for PyTorch fp32). The CTranslate2 copy is created next to the model on
-    first use. PyTorch's dynamic int8 is deliberately not offered: it lost accuracy and needs 3x the memory.
+    GPU: PyTorch fp16 with dynamic windows (needs `model_dir`, the merged Hugging Face model). CPU: CTranslate2 int8 with
+    dynamic windows, which on the 300-utterance paired check matched the GPU model's WER (-0.25 points, 95% CI -0.70 to
+    +0.22) at about 0.7 s per utterance on 4 threads for the medium model (vs ~5 s for PyTorch fp32). On a CPU only the
+    CTranslate2 directory is needed (`./download-models.sh --profile cpu`); if it is missing it is converted from
+    `model_dir`. Defaults point at the project's medium model. PyTorch's dynamic int8 is deliberately not offered: it
+    lost accuracy and needs 3x the memory. Works without torch installed when running on a CPU.
     """
-    model_dir = Path(model_dir)
+    model_dir = Path(model_dir) if model_dir else DEFAULT_MODEL_DIR
     if device == "auto":
-        import torch
+        try:
+            import torch
 
-        device = "cuda" if torch.cuda.is_available() else "cpu"
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+        except ImportError:
+            device = "cpu"
     if device == "cuda":
         return HFTranscriber(model_dir, device="cuda", dtype="fp16", windows=DYNAMIC_WINDOWS)
-    ct2 = convert_to_ct2(model_dir, ct2_dir or model_dir.parent / "ct2-int8", "int8")
+    ct2 = Path(ct2_dir) if ct2_dir else (model_dir.parent / "ct2-int8" if model_dir != DEFAULT_MODEL_DIR else DEFAULT_CT2_DIR)
+    if not (ct2 / "model.bin").exists():
+        if not (model_dir / "config.json").exists():
+            raise FileNotFoundError(f"no CTranslate2 model in {ct2} and no Hugging Face model in {model_dir} to convert; "
+                                    "run ./download-models.sh --profile cpu")
+        convert_to_ct2(model_dir, ct2, "int8")
     return CT2Transcriber(ct2, device="cpu", compute_type="int8", threads=threads, windows=DYNAMIC_WINDOWS)

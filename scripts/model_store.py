@@ -43,6 +43,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     up = sub.add_parser("upload", help="Upload local model artifacts as a new run.")
     common(up, "Folder for this upload (default: a UTC timestamp).")
     up.add_argument("--variants", nargs="+", default=None, help="Only these local model directories (e.g. spacy-balanced).")
+    up.add_argument("--parts", nargs="+", default=None,
+                    help="ASR only: upload just these sub-folders of the model directory (e.g. ct2-int8) and no metrics files.")
     up.add_argument("--set-latest", action="store_true", help="Also make this run the model's `latest/`.")
     up.add_argument("--skip-if-unchanged", action="store_true",
                     help="Do nothing if the model files already match the current `latest/` run (avoids duplicate runs).")
@@ -86,7 +88,7 @@ def main(argv: list[str] | None = None) -> int:
     prefix = artifacts.model_prefix(args.base, args.task, args.model_name)
 
     if args.command == "upload":
-        items = artifacts.collect(args.task, REPO_ROOT, args.variants)
+        items = artifacts.collect(args.task, REPO_ROOT, args.variants, args.parts)
         if not items:
             logger.error("no %s artifacts found; train a model first", args.task)
             return 2
