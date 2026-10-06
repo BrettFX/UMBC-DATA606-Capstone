@@ -109,7 +109,7 @@ def asr_status() -> dict | None:
     status = "finished" if done else "error" if gave_up or (not alive and step is not None and step < (total or 0)) else "running"
     test = _TEST.search(text)
     scores = None
-    for path in sorted(MODELS_DIR.glob("*-atc-finetuned-full/test_scores.json"), key=lambda p: p.stat().st_mtime)[-1:]:
+    for path in sorted(MODELS_DIR.glob("*-atc-finetuned-full*/test_scores.json"), key=lambda p: p.stat().st_mtime)[-1:]:
         scores = json.loads(path.read_text())
     return {"status": status, "step": step, "total": total, "epoch": losses[-1][0] if losses else None,
             "elapsed_s": elapsed, "eta_s": eta, "s_per_step": rate, "loss_curve": [round(l, 4) for _, l in losses[-200:]],

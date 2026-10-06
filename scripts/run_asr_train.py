@@ -4,6 +4,10 @@
 Runs in the project's conda environment (`data-science`). Training needs most of an 8 GB GPU, so it will
 not start while another job (e.g. the NER annotation run) is using it.
 
+Experiments get their own model folder and results file via --tag, so they never overwrite each other:
+    python scripts/run_asr_train.py --epochs 8 --early-stopping 2 --tag 8ep
+    python scripts/run_asr_train.py --model openai/whisper-medium.en --lora --batch-size 2 --grad-accum 16 --tag lora
+
 Usage:
     python scripts/run_asr_train.py --dry-run
     python scripts/run_asr_train.py --train-limit 200 --epochs 1 --test-limit 50     # smoke test
@@ -27,7 +31,7 @@ from asr import TrainConfig, evaluate, load_split, train  # noqa: E402 -- import
 
 logger = logging.getLogger(__name__)
 MIN_FREE_MIB = 5500  # whisper-small.en fp16 mixed-precision training peaks near this on the dev GPU
-SECS_PER_SAMPLE_EPOCH = 0.185  # measured: 1,000 samples x 3 epochs in 556 s on the dev GPU
+SECS_PER_SAMPLE_EPOCH = 0.083  # measured: whisper-small.en, 13,956 samples x 3 epochs in 57.5 min on the dev GPU
 
 
 def free_gpu_mib() -> int | None:
@@ -47,8 +51,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--model", default="openai/whisper-small.en",
                    help="Checkpoint to fine-tune. whisper-small.en fits 8 GB; medium.en does not (full fine-tune).")
     p.add_argument("--output-dir", type=Path, default=None,
-                   help="Default: models/<model>-atc-finetuned-full under the repo.")
+                   help="Default: models/<model>-atc-finetuned-full<tag> under the repo.")
     p.add_argument("--epochs", type=int, default=3)
+    p.add_argument("--tag", default="", help="Name for this experiment, appended as -<tag> to its model folder and results file (e.g. 8ep, lora).")
+    p.add_argument("--early-stopping", type=int, default=None, metavar="PATIENCE",
+                   help="Stop after this many epochs without a validation-WER improvement.")
+    p.add_argument("--max-steps", type=int, default=-1, help="Cap optimizer steps (for speed/memory benchmarks).")
+    p.add_argument("--lora", action="store_true", help="Train LoRA adapters on a frozen fp16 base (fits larger models).")
+    p.add_argument("--lora-rank", type=int, default=32)
+    p.add_argument("--lora-alpha", type=int, default=64)
+    p.add_argument("--gradient-checkpointing", action="store_true", help="Save activation memory at the cost of speed.")
     p.add_argument("--learning-rate", type=float, default=1e-5)
     p.add_argument("--batch-size", type=int, default=4, help="Per-device batch size.")
     p.add_argument("--grad-accum", type=int, default=8)
@@ -70,12 +82,15 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     logging.basicConfig(level=args.log_level, format="%(asctime)s %(levelname)s %(message)s")
     safe = args.model.split("/")[-1].replace(".", "-")
+    args.tag = f"-{args.tag.lstrip('-')}" if args.tag else ""
     config = TrainConfig(
         model=args.model, dataset_dir=args.data_dir / "processed" / "combined_dataset",
-        output_dir=args.output_dir or REPO_ROOT / "models" / f"{safe}-atc-finetuned-full",
+        output_dir=args.output_dir or REPO_ROOT / "models" / f"{safe}-atc-finetuned-full{args.tag}",
         epochs=args.epochs, learning_rate=args.learning_rate, batch_size=args.batch_size, grad_accum=args.grad_accum,
         warmup_steps=args.warmup_steps, train_limit=args.train_limit, val_samples=args.val_samples,
-        workers=args.workers, resume=not args.no_resume)
+        workers=args.workers, resume=not args.no_resume, early_stopping_patience=args.early_stopping,
+        max_steps=args.max_steps, lora=args.lora, lora_rank=args.lora_rank, lora_alpha=args.lora_alpha,
+        gradient_checkpointing=args.gradient_checkpointing)
 
     n_train = len(load_split(config.dataset_dir, "train", limit=config.train_limit))
     steps = -(-n_train // (config.batch_size * config.grad_accum)) * config.epochs
@@ -94,9 +109,9 @@ def main(argv: list[str] | None = None) -> int:
     if not args.eval_only:
         model_dir = train(config)
     if not args.skip_eval:
-        out_csv = (args.results_dir or args.data_dir / "processed" / "asr_results") / f"finetuned_{safe}_full.csv"
+        out_csv = (args.results_dir or args.data_dir / "processed" / "asr_results") / f"finetuned_{safe}_full{args.tag}.csv"
         scores = evaluate(model_dir, config.dataset_dir, "test", out_csv, limit=args.test_limit,
-                          label=f"{args.model}-finetuned-atc-full")
+                          label=f"{args.model}-finetuned-atc-full{args.tag}")
         (config.output_dir / "test_scores.json").write_text(json.dumps(scores, indent=2))
         logger.info("test WER %.3f CER %.3f %s", scores["wer"], scores["cer"],
                     {k: round(v["wer"], 3) for k, v in scores["by_source"].items()})

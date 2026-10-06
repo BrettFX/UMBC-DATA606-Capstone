@@ -33,14 +33,22 @@ def collect(task: str, repo_root: Path, variants: list[str] | None = None) -> li
     """Files to upload for `task` ('asr' or 'ner'): final models, their configs and scores, never checkpoints."""
     items: list[Item] = []
     if task == "asr":
-        for model_dir in sorted((repo_root / "models").glob("*-atc-finetuned-full")):
+        results = repo_root / "data/processed/asr_results"
+        for model_dir in sorted((repo_root / "models").glob("*-atc-finetuned-full*")):
             if variants and model_dir.name not in variants:
                 continue
-            if (model_dir / "final").is_dir():
-                items += _tree(model_dir / "final", f"{model_dir.name}/final")
+            for part in ("final", "final-adapter"):  # the merged model, and the LoRA adapters when there are any
+                if (model_dir / part).is_dir():
+                    items += _tree(model_dir / part, f"{model_dir.name}/{part}")
             items += [Item(model_dir / f, f"{model_dir.name}/{f}") for f in ("train_config.json", "train_metrics.json", "test_scores.json")
                       if (model_dir / f).exists()]
-        items += [Item(p, f"test_results/{p.name}") for p in sorted((repo_root / "data/processed/asr_results").glob("finetuned_*_full.csv"))]
+            # this model's own per-utterance test results: models/<safe>-atc-finetuned-full<tag> -> finetuned_<safe>_full<tag>.csv
+            safe, _, tag = model_dir.name.partition("-atc-finetuned-full")
+            csv = results / f"finetuned_{safe}_full{tag}.csv"
+            if csv.exists():
+                items.append(Item(csv, f"test_results/{csv.name}"))
+        items += [Item(results / name, f"test_results/{name}") for name in ("experiments_summary.md", "experiments_summary.csv")
+                  if (results / name).exists()]  # the cross-model comparison table, for context
     elif task == "ner":
         for model_dir in sorted((repo_root / "models" / "ner").glob("*")):
             if not model_dir.is_dir() or (variants and model_dir.name not in variants):

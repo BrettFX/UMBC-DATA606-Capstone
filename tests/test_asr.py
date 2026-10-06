@@ -48,3 +48,16 @@ def test_collator_masks_padding_and_drops_leading_bos():
     labels = batch["labels"]
     assert labels.shape[0] == 2 and (labels[1] == -100).any() and not (labels[0] == -100).all()
     assert (labels[:, 0] != 50257).all()  # the decoder start token is supplied by the model, not the labels
+
+
+def test_collator_emits_features_in_the_requested_dtype():
+    torch = pytest.importorskip("torch")
+    transformers = pytest.importorskip("transformers")
+    try:
+        processor = transformers.WhisperProcessor.from_pretrained("openai/whisper-small.en")
+    except OSError:
+        pytest.skip("whisper-small.en processor not cached")
+    rows = [{"audio": {"array": np.zeros(16_000, dtype=np.float32)}, "text": "roger"}]
+    assert WhisperCollator(processor, 50257)(rows)["input_features"].dtype == torch.float32
+    # a frozen fp16 LoRA base needs fp16 inputs outside autocast (generation during validation)
+    assert WhisperCollator(processor, 50257, feature_dtype=torch.float16)(rows)["input_features"].dtype == torch.float16

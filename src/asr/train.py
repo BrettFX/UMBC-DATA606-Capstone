@@ -17,7 +17,8 @@ from pathlib import Path
 import jiwer
 import pandas as pd
 import torch
-from transformers import Seq2SeqTrainer, Seq2SeqTrainingArguments, WhisperForConditionalGeneration, WhisperProcessor
+from transformers import (EarlyStoppingCallback, Seq2SeqTrainer, Seq2SeqTrainingArguments, WhisperForConditionalGeneration,
+                          WhisperProcessor)
 
 from .data import WhisperCollator, load_split
 from .text import normalize_for_scoring
@@ -41,6 +42,13 @@ class TrainConfig:
     workers: int = 4  # DataLoader workers: audio decoding and feature extraction run there
     max_new_tokens: int = 128  # bounds runaway repetition; the longest utterances need ~100 tokens
     resume: bool = True
+    early_stopping_patience: int | None = None  # stop after this many epochs without a validation-WER gain
+    max_steps: int = -1  # >0 caps optimizer steps (a quick speed/memory benchmark); -1 trains for `epochs`
+    lora: bool = False  # train low-rank adapters on a frozen fp16 base instead of every weight
+    lora_rank: int = 32
+    lora_alpha: int = 64
+    lora_dropout: float = 0.05
+    gradient_checkpointing: bool = False  # trades speed for activation memory; off unless a model needs it
 
 
 @contextmanager
@@ -78,9 +86,21 @@ def train(config: TrainConfig) -> Path:
     """Fine-tune and return the directory of the saved best model."""
     device = "cuda" if torch.cuda.is_available() else "cpu"
     processor = WhisperProcessor.from_pretrained(config.model)
-    # fp32 master weights; fp16 mixed precision is handled by the Trainer. Small.en full fine-tuning
-    # (weights + grads + Adam ~4 GB) fits an 8 GB card without gradient checkpointing.
-    model = WhisperForConditionalGeneration.from_pretrained(config.model).to(device)
+    # Full fine-tuning keeps fp32 master weights (the Trainer handles fp16 mixed precision); small.en's weights +
+    # grads + Adam (~4 GB) fit an 8 GB card. LoRA instead freezes an fp16 base and trains small fp32 adapters, which
+    # is how a larger model fits the same card.
+    model = WhisperForConditionalGeneration.from_pretrained(
+        config.model, dtype=torch.float16 if config.lora and device == "cuda" else torch.float32).to(device)
+    if config.lora:
+        from peft import LoraConfig, get_peft_model
+
+        model.config.use_cache = False  # incompatible with training; generation re-enables it per call
+        model = get_peft_model(model, LoraConfig(
+            r=config.lora_rank, lora_alpha=config.lora_alpha, lora_dropout=config.lora_dropout, bias="none",
+            target_modules=["q_proj", "k_proj", "v_proj", "out_proj", "fc1", "fc2"]))  # adapters stay fp32
+        trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
+        logger.info("LoRA rank %d: %.1fM trainable of %.1fM parameters", config.lora_rank, trainable / 1e6,
+                    sum(p.numel() for p in model.parameters()) / 1e6)
     train_ds = load_split(config.dataset_dir, "train", limit=config.train_limit, seed=config.seed)
     val_ds = load_split(config.dataset_dir, "validation", limit=config.val_samples, seed=config.seed)
     logger.info("train %d rows, validation %d rows, effective batch %d", len(train_ds), len(val_ds),
@@ -91,15 +111,19 @@ def train(config: TrainConfig) -> Path:
         output_dir=str(config.output_dir), learning_rate=config.learning_rate,
         per_device_train_batch_size=config.batch_size, per_device_eval_batch_size=config.batch_size,
         gradient_accumulation_steps=config.grad_accum, warmup_steps=config.warmup_steps,
-        num_train_epochs=config.epochs, fp16=device == "cuda", eval_strategy="epoch", save_strategy="epoch",
+        num_train_epochs=config.epochs, max_steps=config.max_steps, fp16=device == "cuda", eval_strategy="epoch",
+        save_strategy="epoch", gradient_checkpointing=config.gradient_checkpointing,
+        gradient_checkpointing_kwargs={"use_reentrant": False} if config.gradient_checkpointing else None,
         save_total_limit=2, load_best_model_at_end=True, metric_for_best_model="wer", greater_is_better=False,
         predict_with_generate=True, generation_max_length=config.max_new_tokens, logging_steps=25,
         remove_unused_columns=False,  # the collator reads `audio` and `text`, which the model signature lacks
         dataloader_num_workers=config.workers, report_to=[], seed=config.seed)
     trainer = Seq2SeqTrainer(
         model=model, args=args, train_dataset=train_ds, eval_dataset=val_ds,
-        data_collator=WhisperCollator(processor, model.config.decoder_start_token_id),
-        compute_metrics=_metrics_fn(processor), processing_class=processor)
+        data_collator=WhisperCollator(processor, model.config.decoder_start_token_id,
+                                      feature_dtype=torch.float16 if config.lora and device == "cuda" else torch.float32),
+        compute_metrics=_metrics_fn(processor), processing_class=processor,
+        callbacks=[EarlyStoppingCallback(config.early_stopping_patience)] if config.early_stopping_patience else None)
 
     resume = config.resume and any(config.output_dir.glob("checkpoint-*"))
     logger.info("starting%s", " (resuming from the newest checkpoint)" if resume else "")
@@ -110,7 +134,13 @@ def train(config: TrainConfig) -> Path:
         result = trainer.train()
 
     final = config.output_dir / "final"
-    trainer.save_model(str(final))
+    if config.lora:
+        trainer.save_model(str(config.output_dir / "final-adapter"))  # the adapters alone (tens of MB)
+        merged = trainer.model.merge_and_unload()  # a plain fp16 Whisper that evaluate() and S3 consumers can load
+        merged.config.use_cache = True
+        merged.save_pretrained(str(final))
+    else:
+        trainer.save_model(str(final))
     processor.save_pretrained(str(final))
     (config.output_dir / "train_config.json").write_text(json.dumps(asdict(config), default=str, indent=2))
     (config.output_dir / "train_metrics.json").write_text(json.dumps(

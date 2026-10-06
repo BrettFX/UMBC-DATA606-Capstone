@@ -61,6 +61,20 @@ def test_collect_asr_takes_final_model_and_scores_not_checkpoints(tmp_path):
     assert not any("checkpoint" in k for k in keys)
 
 
+def test_collect_asr_selected_variant_takes_its_own_results_and_adapter(tmp_path):
+    repo = make_repo(tmp_path)
+    touch(repo / "models/whisper-medium-en-atc-finetuned-full-lora/final/model.safetensors")
+    touch(repo / "models/whisper-medium-en-atc-finetuned-full-lora/final-adapter/adapter_model.safetensors")
+    touch(repo / "models/whisper-medium-en-atc-finetuned-full-lora/checkpoint-9/optimizer.pt")
+    for name in ("finetuned_whisper-medium-en_full-lora.csv", "finetuned_whisper-small-en_full-8ep.csv", "experiments_summary.md"):
+        touch(repo / "data/processed/asr_results" / name)
+    keys = {i.rel_key for i in artifacts.collect("asr", repo, ["whisper-medium-en-atc-finetuned-full-lora"])}
+    assert "whisper-medium-en-atc-finetuned-full-lora/final-adapter/adapter_model.safetensors" in keys
+    assert "test_results/finetuned_whisper-medium-en_full-lora.csv" in keys and "test_results/experiments_summary.md" in keys
+    assert "test_results/finetuned_whisper-small-en_full-8ep.csv" not in keys  # another run's results are not dragged along
+    assert not any("checkpoint" in k or k.startswith("whisper-small") for k in keys)
+
+
 def test_collect_rejects_unknown_task(tmp_path):
     with pytest.raises(ValueError):
         artifacts.collect("tts", tmp_path)

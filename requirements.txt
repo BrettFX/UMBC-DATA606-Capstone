@@ -21,3 +21,4 @@ pydantic==2.13.4
 spacy==3.8.9
 seqeval==1.2.2
 bitsandbytes==0.50.2  # 4-bit loading of Qwen3.5-4B for NER annotation on the 6 GB GPU
+peft==0.21.2  # LoRA fine-tuning of whisper-medium.en on the 8 GB GPU (installed with --no-deps so torch stays pinned)

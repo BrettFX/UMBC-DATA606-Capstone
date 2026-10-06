@@ -44,6 +44,7 @@ class WhisperCollator:
 
     processor: object
     decoder_start_token_id: int
+    feature_dtype: torch.dtype = torch.float32  # match the model's weight dtype (fp16 for a frozen LoRA base)
 
     def __call__(self, rows: list[dict]) -> dict[str, torch.Tensor]:
         feats = self.processor.feature_extractor(
@@ -53,4 +54,4 @@ class WhisperCollator:
         ids = labels["input_ids"].masked_fill(labels.attention_mask.ne(1), -100)
         if (ids[:, 0] == self.decoder_start_token_id).all():
             ids = ids[:, 1:]
-        return {"input_features": feats, "labels": ids}
+        return {"input_features": feats.to(self.feature_dtype), "labels": ids}
