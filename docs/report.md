@@ -633,7 +633,20 @@ Neither corpus has entity labels (Section 3.3), so the labels are produced in st
 - **Schema-guided decoding.** Output is constrained to a JSON schema, so every response parses. Spans are validated against the transcript, and an invalid response is retried with a message that names the specific violation.
 - **Rule hints and post-processing.** Cheap rules suggest candidate spans in the prompt; a normalizer merges adjacent FACILITY spans and expands COMMAND phrases; a missed-verb check triggers a retry when a command verb has no span.
 - **Annotation guidelines** (COMMAND, FACILITY and callsign rules) were settled with the project author on concrete ambiguous examples: for instance, generic verbs count as commands, a cleared phrase is one whole COMMAND span, and partial callsigns are labeled.
-- **Prototype ablation (4B model, 95-utterance expanded gold set).** Rule-based normalization and the missed-verb check raised span F1 from 0.709 to 0.802 (exact-match utterances 38 to 47 of 95), mostly by repairing FACILITY (0.39 to 0.82) and COMMAND (0.60 to 0.76) spans. A second prompt revision (v2) did not help (0.693 raw, 0.751 with the same post-processing), and adding retrieved few-shot examples to it scored 0.728. The 4B-against-9B comparison and the remaining prompt variants are recorded in `res/ner_experiments/` and Section E of the notebook; the 9B model was used for production.
+- **Annotator comparison (95-utterance expanded gold set, span F1; each row is one prompt variant, "+normalize +missed" adds the span normalizer and missed-verb check).** The 9B model is better than the 4B in every variant, by 0.11 to 0.16 F1 and 11 to 23 more exactly-right utterances, mostly through CALLSIGN (about 0.94 against 0.62-0.76); its best result is 0.909. Post-processing helps both models (0.827 to 0.909 for the 9B, v1 prompt), while prompt versions v2 and v3 and few-shot retrieval give no clear improvement over v1 for either model. The 9B costs about 8 minutes per variant against under a minute (partly CPU-offloaded on the 8 GB GPU). Raw results are in `res/ner_experiments/`.
+
+| Variant | 4B F1 | 9B F1 | 4B exact | 9B exact | 4B FACILITY / 9B FACILITY | 4B CALLSIGN / 9B CALLSIGN | Time 4B / 9B |
+|---|---|---|---|---|---|---|---|
+| v1 prompt | 0.709 | 0.827 | 38/95 | 49/95 | 0.39 / 0.43 | 0.75 / 0.95 | 32 s / 361 s |
+| v1 +normalize +missed | 0.802 | 0.909 | 47/95 | 64/95 | 0.82 / 0.83 | 0.76 / 0.95 | 35 s / 470 s |
+| v2 prompt | 0.693 | 0.851 | 36/95 | 56/95 | 0.59 / 0.65 | 0.62 / 0.94 | 58 s / 487 s |
+| v2 +normalize +missed | 0.751 | 0.900 | 41/95 | 64/95 | 0.77 / 0.83 | 0.63 / 0.94 | 58 s / 479 s |
+| v2 +fewshot k=4 | 0.728 | 0.844 | 42/95 | 57/95 | 0.51 / 0.63 | 0.75 / 0.92 | 62 s / 513 s |
+| v2 +normalize +missed +fewshot k=4 | 0.790 | 0.898 | 50/95 | 63/95 | 0.81 / 0.89 | 0.76 / 0.92 | 63 s / 518 s |
+| v3 prompt | 0.722 | 0.842 | 42/95 | 54/95 | 0.58 / 0.67 | 0.70 / 0.93 | 63 s / 489 s |
+| v3 +normalize +missed | 0.774 | 0.904 | 46/95 | 63/95 | 0.78 / 0.83 | 0.70 / 0.93 | 66 s / 490 s |
+
+*Caveat: single run per variant on 95 utterances, so differences of a few points between prompt variants are within noise; the 4B-9B gap is consistent across all eight variants.*
 
 ### Human-Verified Evaluation Sets
 
