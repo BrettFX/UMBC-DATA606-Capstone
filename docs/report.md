@@ -74,7 +74,7 @@ Potential evaluation measures include:
 
 **Can NLP techniques reliably identify operational aviation information from ATC transcripts?**
 
-> **NOTE:** The datasets explored so far do not provide token-level entity labels (e.g., callsign spans, command spans, etc.) inside a transcript. Therefore, training or evaluating extraction will require a rule-based/pattern approach (e.g., regex over standardized ATC phrasing) as well as an additional small (likely manually annotated) evaluation dataset, rather than full supervised training on existing labels. As an aside, there likely exists annotated datasets already but it may be possible to leverage the use of an LLM to help curate such a training dataset to then train a `spaCy` NER model to extract different information categories of interest.
+> **NOTE:** The datasets do not provide token-level entity labels (callsign spans, command spans, etc.). Instead of training on existing labels, this project used an LLM to curate a labeled dataset, built small human-verified evaluation sets (gold, silver and a frozen held-out set), and trained a `spaCy` NER model on the curated labels (implemented in Sections 5.9 and 5.10; held-out span F1 0.861-0.878 depending on model). The nine implemented categories are callsign, command, facility, altitude, heading, frequency, waypoint, runway and squawk code.
 
 Potential information categories include:
 
@@ -256,9 +256,9 @@ The model will receive an audio signal as input and attempt to predict the corre
 
 As stated in previous sections, neither dataset provides ready-made entity annotations. Thus, the target labels will be derived rather than taken directly from the source data. For instance, an initial rule-based/pattern pass over transcripts, refined against a small manually annotated evaluation subset (e.g., via LLM or an additional data source found elsewhere).
 
-The comprehensive EDA phase implemented a small step in this direction: `numeric_token_count`, `command_verb_count`, and `callsign_like_count` (Section 4) are lightweight vocabulary/regex proxies, useful for comparative EDA but explicitly not ground-truth entity labels. The planned approach for real extraction is an LLM-based pass (e.g., using Qwen3.5 Instruct) grounded by a curated aviation-terms dictionary (term/acronym, definition, and example usage, e.g. airport codes, phraseology terms, equipment/procedure acronyms), used both as a way to identify/extract candidate entity spans and as context the LLM can use to disambiguate an acronym with more than one meaning from the surrounding utterance, avoiding the need to train a dedicated sequence-labeling model (e.g. a fine-tuned BERT model). 
+The comprehensive EDA phase implemented a small step in this direction: `numeric_token_count`, `command_verb_count`, and `callsign_like_count` (Section 4) are lightweight vocabulary/regex proxies, useful for comparative EDA but explicitly not ground-truth entity labels. The approach implemented for real extraction (Section 5.9) is an LLM-based pass (e.g., using Qwen3.5 Instruct) grounded by a curated aviation-terms dictionary (term/acronym, definition, and example usage, e.g. airport codes, phraseology terms, equipment/procedure acronyms), used both as a way to identify/extract candidate entity spans and as context the LLM can use to disambiguate an acronym with more than one meaning from the surrounding utterance, avoiding the need to train a dedicated sequence-labeling model (e.g. a fine-tuned BERT model). 
 
-> **NOTE:** This is not yet implemented; it's documented here as the intended next step once the core ASR work is complete.
+> **NOTE:** This is implemented in Section 5.9. Unlike the original plan, small student models (spaCy, BERT) were also trained on the LLM-curated labels (5.10), because the application needs entity extraction at CPU speed that a dedicated sequence-labeling model provides and the LLM does not.
 >
 
 Potential target labels include:
@@ -435,14 +435,16 @@ Every analysis in this section converges on the same underlying signal, approach
 
 # 5. Machine Learning
 
-This section covers the project's first modeling milestone: a working Automatic Speech Recognition (ASR) prototype addressing Research Question 1 (Section 2.3), plus the supporting infrastructure built alongside it. The full, runnable prototype is [notebooks/machine_learning.ipynb](../notebooks/machine_learning.ipynb), which executes cleanly end to end; this section summarizes the methodology, results, and findings that matter most. Aviation Information Extraction (Research Question 2) has not started yet; see 5.8 for where it fits in the remaining roadmap.
+This section covers the project's modeling work in two layers. Sections 5.1-5.7 describe the ASR prototype (Research Question 1, Section 2.3) built on a 100-utterance evaluation subset and a 1,000-row fine-tune. Sections 5.8-5.11 report the production results of the standalone pipelines: full-dataset ASR training scored on all 1,909 test utterances (5.8, including entity-level accuracy and Research Question 3), LLM-assisted aviation information extraction and student NER models (5.9-5.10, Research Question 2), and CPU inference benchmarks (5.11). Section 5.12 summarizes results, limitations and next steps. The full analysis is in [notebooks/machine_learning.ipynb](../notebooks/machine_learning.ipynb), which executes cleanly end to end (Sections A-E prototype; F-H load saved production results); where the two layers disagree, the production results supersede the prototype figures.
 
 ## 5.1 Modeling Infrastructure
 
-Two pieces of reusable infrastructure were built alongside the ASR prototype so that data curation and (eventually) model training/evaluation don't require running a notebook end to end:
+Reusable infrastructure was built so that data curation, model training, evaluation and deployment don't require running a notebook end to end:
 
 - **`scripts/run_ingest.py`**: a standalone CLI wrapper around `DataIngestPipeline` (the same pipeline documented in Section 3.5), with `--force` (recompute from scratch), `--num-proc` (parallelize feature derivation), `--purge-raw` (delete each source's raw Hugging Face download cache once `data/processed/` exists, to reclaim disk space), `--purge-only`, and `--log-level`. This avoids the EDA notebook's much larger memory footprint (plots, audio-playback widgets, word clouds all sharing one kernel with the pipeline's own data), which matters on machines with limited RAM.
-- **`run-pipeline.sh`**: an interactive driver script intended to orchestrate every stage of the project's pipeline (data ingest today; training and inference to be added as their own stages). It asks, per stage, whether to run it and what arguments to pass, so the same question flow will carry over once the ASR and NER training/evaluation pipelines described in 5.8 exist.
+- **`run-pipeline.sh`**: an interactive driver script that orchestrates every stage of the pipeline (data ingest, NER annotation, curation and training, ASR training, and model download/upload). It asks, per stage, whether to run it and what arguments to pass.
+- **Standalone ASR and NER pipelines** (`scripts/run_asr_train.py`, `run_ner_annotate.py`, `run_ner_curate.py`, `run_ner_train.py`; shared code in `src/asr/` and `src/ner/`): resumable, chunked runs with progress files and a monitoring dashboard, covered by CPU-only tests (54 passing).
+- **Benchmarking and model store** (`scripts/benchmark_inference.py`, `scripts/model_store.py`, `upload-models.sh`, `download-models.sh`): latency/WER benchmarks (5.11) and a versioned S3 model store with a `latest/` tag that inference always targets.
 
 As a practical side effect, this infrastructure was validated across two different development machines: the ASR prototype below was run end to end on both an RTX 3070 Ti Laptop GPU (8.6 GB VRAM) and, independently, an RTX 1000 Ada Generation Laptop GPU (6.4 GB VRAM), reproducing the same baseline and domain-adapted-comparison results on both (see the non-determinism caveat in 5.4 for the one piece that doesn't reproduce exactly).
 
@@ -522,40 +524,264 @@ Per-utterance WER (all three models) was joined back to `utterance_df`'s acousti
 
 ![WER vs. utterance characteristics](../res/figures/wer_vs_utterance_characteristics.png)
 
-This join is exploratory at this stage: the error analysis in 5.5 already identifies *acoustic degradation* as a trigger for the fabricated-hallucination failure mode specifically (the one concrete example found had unusually poor audio quality for its duration), which is consistent with Research Question 3's premise that acoustic quality should relate to model failure. A fuller quantitative treatment of this relationship (e.g., formal correlation/regression against each characteristic, by model and by dataset source) is deferred to the standalone evaluation pipeline described in 5.8, once it can run against the full test set rather than the 100-row prototyping subset.
+This join is exploratory at this stage: the error analysis in 5.5 already identifies *acoustic degradation* as a trigger for the fabricated-hallucination failure mode specifically (the one concrete example found had unusually poor audio quality for its duration), which is consistent with Research Question 3's premise that acoustic quality should relate to model failure. A fuller quantitative treatment of this relationship (e.g., formal correlation/regression against each characteristic, by model and by dataset source) is carried out on the full test set in 5.8.
 
-## 5.8 Summary, Limitations, and Next Steps
+## 5.8 Full-Dataset ASR Training and Evaluation
 
-Three ASR conditions were compared on the same fixed 100-utterance held-out subset of this project's test split: a generic baseline, a domain-adapted comparison model, and a project-trained fine-tune. The project's own fine-tune outperformed the much larger baseline in both domains after minimal training, while still trailing the comparison model on real audio by a wide margin — a result consistent with the gap in model size and training data between the two. Aviation-specific proxy metrics and a per-utterance error taxonomy both surfaced findings that a single aggregate WER number would have hidden, including two distinct Whisper hallucination patterns and a domain-gap collapse in callsign recognition sharper than the WER numbers alone suggest.
+The prototype in 5.4 fine-tuned on 1,000 of the 13,956 training rows and was evaluated on a 100-utterance subset. The standalone pipeline (`scripts/run_asr_train.py`, `src/asr/`) removes both limits: every model below was trained on the full train split and scored once on the **full 1,909-utterance test split** (813 real-audio and 1,096 simulated-audio utterances). These results supersede the 100-utterance figures in 5.3-5.4, which remain as the record of the prototype.
+
+### Design
+
+**Data and leakage.** The splits are the leakage-safe splits from Section 3.5. Training uses all 13,956 train rows, per-epoch checkpoint selection uses a 500-row stratified validation sample, and the test split is scored once per model. Log-mel features are computed on the fly in the data-loader workers rather than precomputed (an 80x3000 float32 spectrogram is about 1 MB per clip, roughly 13 GB for the corpus).
+
+**Three fine-tuning experiments** use identical data, scoring, and normalization (5.2):
+
+1. **whisper-small.en, full fine-tune, 3 epochs**: the prototype setup scaled to the whole train split (learning rate 1e-5).
+2. **whisper-small.en, up to 8 epochs** with early stopping (patience 2 epochs on validation WER; it never triggered, so all 8 epochs ran, and the best epoch by validation WER was 6): does training longer help?
+3. **whisper-medium.en with LoRA adapters** (Hu et al., 2021): low-rank adapters (rank 32, alpha 64, dropout 0.05) on the attention and feed-forward projections, on a frozen fp16 base. This trains 34.6M of 798.5M parameters (4.3%), so a model that cannot be fully fine-tuned on an 8 GB GPU (5.4: about 12.3 GB for weights, gradients and optimizer state) fits easily. LoRA needs a much higher learning rate than full fine-tuning (5e-4 here versus 1e-5), the effective batch is 32 (2 x 16 accumulation), training runs 3 epochs, and the adapters are merged into a plain fp16 model afterwards for deployment.
+
+**Comparison conditions** are zero-shot `whisper-small.en` and `whisper-medium.en` (no domain training) and the off-the-shelf `jacktol/whisper-medium.en-fine-tuned-for-ATC` model, all scored on the same full test split.
+
+**Statistics.** Corpus WER is edit-distance weighted (not a mean of per-utterance WERs). Confidence intervals are 95% percentile bootstrap intervals over utterances (2,000 resamples). Comparisons between two models are *paired*: the same resampled utterances are used for both, so a difference is tested directly instead of by comparing two overlapping intervals.
+
+**Engineering findings worth recording.**
+
+- *LoRA batch size.* At a per-device batch of 4, medium.en + LoRA took 114 seconds per optimizer step as the driver spilled GPU memory into system RAM. A per-device batch of 2 with 16 accumulation steps (the same effective batch of 32) ran at 11 seconds per step with a 7.1 GB peak, a tenfold difference caused by memory pressure rather than computation. This is the same failure mode as the small-model finding in 5.4.
+- *Resumable training.* Long runs resume from the newest checkpoint. The repository pins `torch` 2.5.1, whose restricted `torch.load` cannot read Trainer optimizer and RNG state under `transformers` 5, so the pipeline lifts that guard only while resuming from checkpoints that the same process wrote into its own output folder (verified by a CPU test that resumes training mid-run).
+- *Resource guard.* The training CLI refuses to start while another job holds the GPU, since a collision would crash both.
+
+### Results
+
+| Model (full test split) | Overall WER (95% CI) | Real audio WER | Simulated audio WER | Train time | Best validation WER |
+| --- | --- | --- | --- | --- | --- |
+| `whisper-small.en`, zero-shot | 42.2% (39.9-44.6) | 61.3% (57.4-65.9) | 28.8% (26.6-31.6) | n/a | n/a |
+| `whisper-medium.en`, zero-shot | 35.7% (33.7-37.9) | 53.6% (49.3-58.4) | 23.1% (22.1-24.2) | n/a | n/a |
+| `jacktol` ATC `medium.en` (off the shelf) | 12.4% (11.8-13.0) | 9.1% (8.3-9.9) | 14.8% (13.9-15.6) | n/a | n/a |
+| `small.en` fine-tuned, 3 epochs | 5.4% (4.9-5.9) | 10.9% (9.9-12.0) | 1.5% (1.1-1.9) | 57 min | 5.94% |
+| `small.en` fine-tuned, 8 epochs | 4.9% (4.4-5.4) | 9.7% (8.8-10.7) | 1.4% (1.1-1.8) | 154 min | 5.16% |
+| **`medium.en` + LoRA, 3 epochs (selected)** | **3.8% (3.4-4.3)** | **7.5% (6.7-8.4)** | **1.2% (0.9-1.6)** | 239 min | 4.26% |
+
+![ASR WER by model on the full test split](../res/figures/asr_full_test_wer_by_model.png)
+
+- **Fine-tuning on the full train split removes most of the error.** Zero-shot `medium.en` scores 35.7% overall and 53.6% on real audio; the selected model scores 3.8% and 7.5%.
+- **On real audio, the hardest and most operationally relevant domain, the selected model is significantly better than the off-the-shelf ATC model:** 7.5% versus 9.1%, a paired difference of -1.5 points (95% CI -2.4 to -0.6). The 3-epoch small model is significantly *worse* than that model on real audio (+1.9 points, CI +0.8 to +2.8), and the 8-epoch small model is statistically indistinguishable from it (+0.7, CI -0.3 to +1.7). All three fine-tuned models are significantly better overall (by 7.0 to 8.6 points) because the off-the-shelf model is poor on simulated audio.
+- **Training the small model longer helped only modestly:** 8 epochs improved real-audio WER from 10.9% to 9.7% for 2.7 times the training time, and simulated audio barely moved (1.5% to 1.4%).
+- **Interpretation caveats.** Simulated audio is 57% of the test split, so overall WER flatters models that do well on it. The off-the-shelf model's real-audio number carries the unverified train/test-overlap risk from 5.2, and the project's models saw ATCOSIM in training while the off-the-shelf model never did (5.4), so the simulated-audio comparison is not a fair generalization test. Each model was trained once, so run-to-run training variance is not captured by these intervals (5.4 documents a few tenths of a point from GPU non-determinism).
+- **Error profile of the selected model.** 78% of all test utterances are transcribed exactly right (59% of real-audio and 92% of simulated-audio utterances), and 29 of 1,909 utterances have WER above 50%. Only 3 exceed 100%: two have extra or substituted digits on very short clips ("inbound tusin" became "three five two seven") and one appends unrelated words; none is the repetition-loop hallucination that dominated the baseline's worst cases (5.5).
+
+### Entity-Level Accuracy (Aviation-Specific Evaluation, Revisited)
+
+Section 5.6 could only approximate aviation-specific accuracy with vocabulary proxies because neither corpus has entity labels. With the NER model from 5.9, entity accuracy can be measured directly: the selected spaCy model extracts entities from each reference transcript and from each model's transcript (both with the 5.2 scoring normalization), and an entity counts as recognized when the same label and the same text appear in both.
+
+| Model | Entity F1 | Real audio | Simulated audio | CALLSIGN recall | COMMAND | ALTITUDE | FREQUENCY | WAYPOINT |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| **`medium.en` + LoRA (selected)** | **0.935** | **0.856** | **0.985** | **0.886** | 0.972 | 0.964 | 0.937 | 0.928 |
+| `small.en`, 8 epochs | 0.918 | 0.821 | 0.980 | 0.860 | 0.959 | 0.964 | 0.917 | 0.898 |
+| `small.en`, 3 epochs | 0.908 | 0.798 | 0.978 | 0.847 | 0.954 | 0.953 | 0.917 | 0.882 |
+| `jacktol` ATC `medium.en` | 0.754 | 0.787 | 0.733 | 0.557 | 0.952 | 0.926 | 0.737 | 0.252 |
+| `medium.en`, zero-shot | 0.513 | 0.343 | 0.612 | 0.286 | 0.718 | 0.468 | 0.605 | 0.154 |
+| `small.en`, zero-shot | 0.445 | 0.260 | 0.549 | 0.231 | 0.660 | 0.383 | 0.522 | 0.128 |
+
+![Per-label recall of aviation entities in the transcripts](../res/figures/asr_entity_recall_by_label.png)
+
+- **WER hides where the errors fall.** The selected model preserves 93.5% of the 5,511 reference entities, but **callsigns are its weakest entity (recall 0.886)** compared with 0.972 for commands and 0.964 for altitudes: airline names and spelled alphanumeric registrations are the hardest tokens, and a 7.5% real-audio WER does not reveal that.
+- **Entity accuracy separates models more sharply than WER.** The off-the-shelf model's real-audio WER (9.1%) is close to the selected model's (7.5%), yet its overall entity F1 is 0.754 with callsign recall of 0.557 and waypoint recall of 0.252. This directly supports the project's premise (Section 2.2) that WER alone is not a sufficient evaluation for this domain.
+- **Entity gains track WER gains.** CALLSIGN recall rises from 0.847 (small, 3 epochs) to 0.860 (8 epochs) to 0.886 (medium + LoRA); callsigns remain the weakest label for every fine-tuned model.
+- **Caveats.** The reference entities are NER-derived rather than human-verified. The same model processes both sides, so its own errors largely cancel, but a systematic NER bias would not. Matching requires the identical label and text, which is strict for multi-word spans.
+
+### Training Dynamics and the 8-Epoch Hypothesis
+
+![Validation WER by epoch](../res/figures/asr_validation_wer_by_epoch.png)
+
+The small model's validation WER plateaus near 5.2% after epoch 4 to 6, while its validation *loss* is lowest at epoch 3 (0.127) and rises afterwards (0.142 at epoch 8): the usual signature of diminishing returns and mild overfitting. The LoRA model behaves differently. Its validation WER was still falling steeply at the last epoch (8.5%, 5.7%, 4.3% at epochs 1 to 3; loss 0.186, 0.122, 0.111).
+
+**Future enhancement (hypothesis, not yet tested).** Training the LoRA model for about 8 epochs would plausibly yield additional gains, most likely on real audio. The caveats are that the small model's extra epochs showed diminishing returns, that the LoRA learning rate (5e-4) was a single untuned choice, and that the run would cost roughly 10 GPU-hours on the development GPU (239 minutes for 3 epochs). A learning-rate comparison and a higher LoRA rank are natural companions. The 3-epoch model is used for the prototype application.
+
+### Communication Characteristics and WER (Research Question 3)
+
+The prototype analysis (5.7) joined WER to utterance characteristics on 100 utterances. With the full-test results and entity counts from the LLM annotation run (5.9; matched by transcript text for 1,851 of 1,909 utterances), the question can be answered on all 1,909 utterances.
+
+![WER by duration and entity count](../res/figures/asr_wer_vs_characteristics_full_test.png)
+
+| Utterance duration | Real audio: n | WER | Simulated audio: n | WER |
+| --- | --- | --- | --- | --- |
+| under 2 s | 200 | 14.6% | 63 | 5.1% |
+| 2-3 s | 175 | 9.7% | 181 | 1.8% |
+| 3-4 s | 168 | 5.9% | 373 | 0.5% |
+| 4-6 s | 197 | 6.1% | 369 | 1.0% |
+| 6 s and longer | 73 | 6.4% | 110 | 2.5% |
+
+| Spearman correlation of per-utterance WER with... (* = p < 0.01) | duration | speech rate | SNR proxy | numeric tokens | word count | entities |
+| --- | --- | --- | --- | --- | --- | --- |
+| Selected model, all audio | -0.07* | +0.08* | -0.17* | -0.14* | -0.02 | -0.13* |
+| Selected model, real audio | -0.05 | +0.02 | -0.14* | -0.13* | -0.03 | -0.15* |
+| Selected model, simulated audio | +0.05 | -0.05 | +0.05 | -0.10* | +0.02 | -0.01 |
+| Zero-shot `medium.en`, real audio | -0.32* | +0.14* | -0.03 | -0.28* | -0.25* | -0.12* |
+
+- **Very short transmissions are the hardest, concentrated on real audio:** real-audio WER is 14.6% under 2 s, 9.7% at 2-3 s, and about 6% beyond 3 s; simulated audio has the same shape at a much lower level.
+- **Operationally dense transmissions are easier, not harder.** Real-audio WER is 14.5% for utterances with 0 or 1 entities and 5.1% to 5.8% for utterances with 3 or more. Entity count largely stands in for length and context: a longer, more structured transmission gives the model more to condition on.
+- **Per-utterance correlations are weak.** For the selected model every Spearman |rho| is at most 0.17 (strongest: the SNR proxy, -0.17), and several reach p < 0.01 only because there are about 1,900 utterances. Fine-tuning weakened the dependence on length: for zero-shot `medium.en`, real-audio WER correlates with duration at rho = -0.32, for the selected model at -0.05. The remaining difficulty is concentrated in the shortest clips instead of being spread across the characteristics.
+- **Caveats.** The SNR figure is a dynamic-range heuristic (Section 4), entity counts are LLM-derived (span F1 about 0.88 against human labels, 5.9), and the evidence is correlational.
+
+## 5.9 Aviation Information Extraction: LLM-Assisted Labeling at Scale (Research Question 2)
+
+Neither corpus has entity labels (Section 3.3), so the labels are produced in stages: an LLM *teacher* labels the whole corpus, humans verify small evaluation sets, and small *student* models (5.10) are trained on the curated labels. The pipeline is `scripts/run_ner_annotate.py`, then `scripts/run_ner_curate.py`, then `scripts/run_ner_train.py` (code in `src/ner/`). Nine labels are used: CALLSIGN, COMMAND, FACILITY, ALTITUDE, HEADING, FREQUENCY, WAYPOINT, RUNWAY and SQUAWK.
+
+### Annotator Design
+
+- **Model and serving.** Qwen3.5-9B (4-bit weights) served with vLLM on the 8 GB development GPU, partly offloaded to CPU memory. The 4B model fits on the GPU directly and was used for most prompt experiments.
+- **Schema-guided decoding.** Output is constrained to a JSON schema, so every response parses. Spans are validated against the transcript, and an invalid response is retried with a message that names the specific violation.
+- **Rule hints and post-processing.** Cheap rules suggest candidate spans in the prompt; a normalizer merges adjacent FACILITY spans and expands COMMAND phrases; a missed-verb check triggers a retry when a command verb has no span.
+- **Annotation guidelines** (COMMAND, FACILITY and callsign rules) were settled with the project author on concrete ambiguous examples: for instance, generic verbs count as commands, a cleared phrase is one whole COMMAND span, and partial callsigns are labeled.
+- **Prototype ablation (4B model, 95-utterance expanded gold set).** Rule-based normalization and the missed-verb check raised span F1 from 0.709 to 0.802 (exact-match utterances 38 to 47 of 95), mostly by repairing FACILITY (0.39 to 0.82) and COMMAND (0.60 to 0.76) spans. A second prompt revision (v2) did not help (0.693 raw, 0.751 with the same post-processing), and adding retrieved few-shot examples to it scored 0.728. The 4B-against-9B comparison and the remaining prompt variants are recorded in `res/ner_experiments/` and Section E of the notebook; the 9B model was used for production.
+
+### Human-Verified Evaluation Sets
+
+Evaluating the teacher needs labels it did not produce. Each candidate utterance was labeled by two annotators, the 9B model and Claude (blind, from the transcript alone), and the project author adjudicated **only the disagreements**, with options A/B randomly assigned so the reviewer could not tell which annotator was which. Four label sets result:
+
+| Set | Utterances | Trust | Use |
+| --- | --- | --- | --- |
+| gold | 41 | hand-labeled | original tuning set |
+| gold_expanded | 95 | human-verified | tuning and few-shot retrieval |
+| silver | 167 | two annotators, not human-reviewed | training only |
+| held-out gold | 100 | random sample, 38 human-adjudicated and 62 agreed by both annotators; frozen, never tuned on | final evaluation |
+
+- **The task is genuinely ambiguous.** The two annotators agree exactly on 132 of 221 utterances (60%) in round 1 and 62 of 100 (62%) in round 2, with span F1 of 0.874 and 0.870. Disagreements are mostly COMMAND boundaries and multi-word FACILITY spans.
+- **Adjudication outcomes.** Round 1: Claude 16, the 9B model 8, edited 10. Round 2: Claude 23, edited 8, the 9B model 7. Across both rounds (72 contested utterances), Claude's labels were chosen 54% of the time, the 9B model's 21%, and in 25% neither was fully right. A small audit of agreed utterances (labels shown) changed 1 of 20.
+- **Caveat.** The 62 held-out utterances on which both annotators agreed were not individually reviewed, so a shared error would inflate scores slightly.
+
+### Production Run and Label Quality
+
+![Entity label counts, full run and curated training set](../res/figures/ner_full_run_label_counts.png)
+
+| Run statistic | Value |
+| --- | --- |
+| Utterances annotated | 15,083 (de-duplicated corpus) |
+| Entity spans | 42,915 |
+| Valid on completion | 99.5% |
+| Needed at least one retry | 24.2% |
+| Wall time | 12.5 h (3.03 s per utterance) on the 8 GB laptop GPU |
+| Most frequent / rarest label | CALLSIGN 13,447 and COMMAND 13,050 / SQUAWK 311 |
+
+The 12.5-hour run replaced an estimated 50 hours for the earlier Hugging Face prototype (about 70 times faster per utterance with vLLM and guided decoding, not counting the redesigned prompt).
+
+| Production labels against human labels | Span F1 |
+| --- | --- |
+| Held-out gold (100, frozen; 67 utterances exactly right) | **0.878** (95% CI 0.838-0.915) |
+| Gold expanded (95; also informed prompt and rule choices, so optimistic) | 0.907 (0.874-0.937) |
+| Silver (167) | 0.944 |
+
+Held-out per-label F1: RUNWAY 1.000, ALTITUDE 0.939, COMMAND 0.918, CALLSIGN 0.910, FACILITY 0.817, FREQUENCY 0.757 (recall 0.61: the model misses digit-only shorthand frequencies), WAYPOINT 0.735. HEADING and SQUAWK have 3 and 1 held-out spans, so their scores are not meaningful.
+
+### Curation: Routing Doubtful Labels
+
+The teacher's labels are not all trustworthy, so cheap signals flag doubtful ones: a retry was needed, a span was unresolved, no entity was found, a command cue had no span, or numbers were left unlabeled.
+
+- **The signals work.** On the 195 human-verified utterances, the 38% that were flagged had at least one wrong label 61% of the time (45 of 74), against 16% (19 of 121) for the unflagged 62%.
+- Across the corpus, 4,939 of 15,083 utterances (33%) are flagged. They are excluded from training and kept in a review queue.
+- **Leakage guard.** 195 utterances whose text also occurs in a human-verified set were removed from training, so duplicated wording cannot inflate evaluation.
+- **Curated set:** train 7,942, dev 898, LLM-labeled test 1,183, gold 95, held-out 100 (4,865 utterances flagged and dropped; 195 dropped as text leaks). The LLM-labeled dev/test splits measure agreement with the teacher on its *easy* cases, so the human-verified sets are the real measure of quality.
+
+![Label distribution of the curated training set](../res/figures/ner_label_distribution.png)
+
+## 5.10 Student NER Models
+
+The teacher takes about 3 seconds per utterance on a GPU, so it cannot run inside the application. Two small student models are trained on the curated labels and scored against the same human-verified sets: a spaCy blank pipeline (CNN tok2vec with a NER head) and a BERT token classifier. Each is trained twice, with and without **rare-label balancing** (oversampling utterances that contain SQUAWK, HEADING, RUNWAY and WAYPOINT spans). Scoring is exact-match span F1 (label and character offsets must match), with micro, per-label and macro averages and bootstrap confidence intervals over utterances.
+
+| Model | Held-out F1 (n=100) | Gold F1 (n=95) |
+| --- | --- | --- |
+| Teacher (Qwen3.5-9B labels) | 0.878 (0.838-0.915) | 0.907 (0.874-0.937) |
+| spaCy | 0.871 | 0.875 |
+| **spaCy + rare-label balancing (selected)** | 0.861 | 0.891 |
+| BERT | 0.874 | 0.883 |
+| BERT + rare-label balancing | 0.866 | 0.881 |
+
+![Student models against the teacher](../res/figures/ner_student_vs_teacher_f1.png)
+
+- **All four students match the teacher on human labels.** The paired bootstrap difference between spaCy-balanced and the teacher on the held-out set is -0.017 (95% CI -0.047 to +0.013), which includes zero. Students trained on the teacher's labels cannot be expected to exceed it, and they inherit its label noise, so the ceiling is about the teacher's accuracy.
+- **BERT has no accuracy advantage over spaCy** (0.874 against 0.871 held-out F1, within noise) and needs a GPU for comparable speed (about 2,200 utterances/s against about 3,700 for spaCy on a CPU), so spaCy was selected. The model is about 4 MB and runs roughly four orders of magnitude faster than the teacher (about 0.3 utterances/s).
+- **Balancing is suggestive, not conclusive.** On the human-verified gold set it improved per-label F1 for RUNWAY (+4.8 points), HEADING (+4.6), COMMAND (+3.2), FACILITY (+1.8) and WAYPOINT (+1.4), changed ALTITUDE and SQUAWK by 0, and lowered FREQUENCY (-2.5); macro-F1 rose from 0.875 to 0.890. The held-out set contains almost no rare-label spans (so its micro-F1 dipped slightly) and the per-label supports are small (10-96 spans), so these deltas are not statistically established. The balanced model was selected because it has the best gold-set macro-F1 of the spaCy variants, at no cost within the held-out confidence interval.
+
+![Effect of rare-label balancing per label](../res/figures/ner_balancing_effect_per_label.png)
+
+**Limitations.** Evaluation sets are small (95-100 utterances), exact-match scoring penalizes harmless boundary differences, and the held-out set was frozen only after the prompt and guidelines were settled, so some guideline choices inevitably reflect the gold set.
+
+## 5.11 Inference Performance and CPU Deployment
+
+The application must run on devices without a GPU, so latency is a design constraint, and a faster configuration is only acceptable if it is not less accurate. `scripts/benchmark_inference.py` times each configuration (model, backend, device, threads) in its own process at batch size 1 on the same utterances, recording latency, real-time factor (RTF; below 1 is faster than real time), memory and WER together. Test hardware: an Intel i9-12900H laptop (a high-end CPU, so slower devices will be slower in absolute terms) with an RTX 3070 Ti GPU under WSL2. Every experiment and decision is logged in `res/benchmarks/EXPERIMENTS.md`.
+
+**Baseline (24 utterances; WER differences of a point or two are noise at this size).**
+
+| Configuration (medium.en + LoRA) | Median latency | RTF | Peak RAM | WER |
+| --- | --- | --- | --- | --- |
+| GPU, PyTorch fp16 | 0.29 s | 0.10 | 2.3 GB | 6.3% |
+| CPU, PyTorch fp32, 4 threads | 5.26 s | 1.64 | 5.1 GB | 6.3% |
+| CPU, PyTorch dynamic int8 | 3.41 s | 1.07 | 7.7 GB | 6.7% |
+| CPU, CTranslate2 int8 | 2.54 s | 0.81 | 2.2 GB | 8.0% |
+| CPU, small.en, CTranslate2 int8 | 0.96 s | 0.30 | 1.4 GB | 8.0% |
+| NER (spaCy) | 0.001 s | n/a | 0.9 GB | n/a |
+
+More than 4 threads gave no gain on this hybrid-core CPU. NER takes about 1 ms, so latency is entirely ASR.
+
+**Finding: the encoder wastes about 90% of its work.** Whisper always encodes a fixed 30 s window, but utterances average 3.8 s, and the encoder accounts for about 2.4 of the 2.5 s on the CPU. Encoding each clip in the smallest of 10/15/20/30 s windows that fits it ("dynamic windows") cuts CTranslate2 int8 latency from 2.54 s to **0.71 s** (3.6x) and the PyTorch backends by 2.3-2.7x. The model was fine-tuned on 30 s windows only, so accuracy had to be checked against the 30 s window on the same 300 clips:
+
+| Encoder window | WER at 30 s | WER at this window |
+| --- | --- | --- |
+| 20 s | 4.53% | 4.66% |
+| 15 s | 4.55% | 4.52% |
+| **10 s** | **4.55%** | **4.55%** |
+| 8 s | 4.51% | 8.18% |
+| 6 s | 4.22% | 40.4% |
+| 4 s | 5.60% | 237.9% |
+
+Ten seconds is the floor without retraining; shorter windows collapse into hallucination.
+
+![CPU latency against WER for each configuration](../res/figures/cpu_latency_vs_wer.png)
+
+**Accuracy of the fast configurations (300 paired utterances, 150 real and 150 simulated).**
+
+| Configuration | WER | Difference from GPU fp16 (95% CI) |
+| --- | --- | --- |
+| GPU fp16 reference | 4.53% | n/a |
+| **CTranslate2 int8 + dynamic windows (CPU, 0.74 s median)** | **4.28%** | **-0.25 (-0.70, +0.22)** |
+| PyTorch dynamic int8 + dynamic windows | 6.78% (13.1% real) | +2.25 (-0.13, +6.75), gross failures on real audio |
+| small.en, CTranslate2 int8, dynamic windows | 6.69% (12.03% real) | +2.15 (+1.24, +3.12), worse |
+
+- Neither CTranslate2 int8 nor dynamic windows measurably costs accuracy for the medium model; "no clear difference" rules out differences larger than about 0.7 points but is not proof of equality. The 8.0% against 6.3% in the baseline was noise.
+- PyTorch dynamic int8 is both less accurate and needs about 3.5x the memory (7.7 GB against 2.2 GB), so it was rejected.
+- The small model is a genuine trade of about 2 points of WER (about 4 on real audio) for 0.26 s latency.
+
+**Decision.** On a CPU the application uses medium.en + LoRA through CTranslate2 int8 with dynamic windows on 4 threads: about **0.7 s per utterance (RTF about 0.2) in 2.2 GB**, roughly 7x faster than the PyTorch fp32 baseline, with accuracy indistinguishable from the GPU model (`best_transcriber()` in `src/asr/inference.py` chooses it). The converted model is 0.77 GB and published as its own artifact, so a CPU-only device needs neither PyTorch nor transformers; this was verified in a clean environment (median 0.82 s per clip, transcripts identical to the local model's).
+
+**Model artifacts.** Models are published to a versioned S3 store (`s3://endurasoft-dev-ml-ops/ml-tasks/{asr,ner}/<model-name>/<run-id>/` with a `latest/` copy, sha256 manifests, and dry-run-by-default uploads). `./upload-models.sh` and `./download-models.sh --profile cpu|gpu` set up a new device, and inference always targets `latest/`. Published: the medium.en + LoRA ASR model (PyTorch and CTranslate2 int8) and the balanced spaCy NER model.
+
+**Caveats.** One high-end laptop CPU was measured and thread-count rows are approximate on a hybrid CPU; model load takes 5-6 s, so the application must keep the model in memory; transcripts longer than 30 s need chunking.
+
+## 5.12 Summary, Limitations, and Next Steps
+
+**Research Question 1 (ASR).** The prototype (5.3-5.7) compared a generic baseline, a domain-adapted comparison model and a small project fine-tune on 100 utterances. The full-dataset experiments (5.8) trained on all 13,956 training rows and were scored on all 1,909 test utterances. The selected **whisper-medium.en + LoRA** model reaches **3.8% WER overall, 7.5% on real audio and 1.2% on simulated audio**, against 35.7% for the zero-shot model, and is significantly better on real audio than the off-the-shelf ATC model (9.1%; paired difference -1.5 points, 95% CI -2.4 to -0.6). It preserves 93.5% of aviation entities; callsigns are its weakest entity (recall 0.886).
+
+**Research Question 2 (information extraction).** A Qwen3.5-9B annotator with schema-guided decoding, rule hints and normalization labeled all 15,083 utterances in 12.5 hours, reaching span F1 0.878 against a frozen human-verified held-out set (5.9). Routing signals isolated the doubtful third of the labels, and spaCy and BERT students trained on the rest match the teacher on human labels (5.10). The selected spaCy model with rare-label balancing is about 4 MB and runs at about 3,700 utterances per second on a CPU.
+
+**Research Question 3 (characteristics and performance).** On the full test split, short transmissions are hardest (real-audio WER 14.6% under 2 s against about 6% beyond 3 s), entity-rich transmissions are easier, and per-utterance correlations are weak (|rho| at most 0.17) (5.8).
+
+**Deployment.** On a CPU the ASR model runs at about 0.7 s per utterance (RTF about 0.2, 2.2 GB) through CTranslate2 int8 with dynamic encoder windows, with accuracy indistinguishable from the GPU model (5.11).
 
 **Known limitations, disclosed rather than hidden:**
 
-- The comparison model's real-audio numbers carry an unverified train/test-overlap risk (5.2); the project's own fine-tune's simulated-audio numbers aren't a fair generalization test against the comparison model for the mirror-image reason (ATCOSIM was in the fine-tune's own training data, but never in the comparison model's).
-- All aviation-entity metrics (5.6) are proxy/heuristic, since neither corpus provides ground-truth entity-span labels.
-- The scoring normalizer does not reconcile "nine" vs. "niner," or decompose alphanumeric callsigns.
-- The fine-tune used only 1,000 of the ~13,956 available training rows and 3 epochs; its exact metrics also vary slightly run to run due to GPU non-determinism (5.4).
+- The off-the-shelf comparison model's real-audio numbers carry an unverified train/test-overlap risk (5.2), and the project's models' simulated-audio numbers are not a fair generalization test against it for the mirror-image reason (ATCOSIM was in their training data but never in the comparison model's).
+- Each model was trained once; run-to-run variation (a few tenths of a point, 5.4) is not in the confidence intervals.
+- Entity-level ASR accuracy (5.8) uses NER-derived reference entities, which are not human-verified, and the NER evaluation sets are small (95-100 utterances) and partly agreed-by-annotators rather than individually reviewed.
+- Students inherit the teacher's label noise, and 4,865 flagged utterances are unreviewed and excluded from training.
+- The scoring normalizer does not reconcile "nine" with "niner" or decompose alphanumeric callsigns, and the "request" verb is not yet decided as a COMMAND.
+- Latency was measured on one high-end laptop CPU.
 
 **Next steps**, in order:
 
-1. **Standalone ASR training/evaluation pipeline.** Promote this notebook's training and evaluation loop into reusable `ASRTrainingPipeline`/`ASREvaluationPipeline` classes in `src/`, mirroring `DataIngestPipeline`'s pattern (Section 3.5) — invokable from the command line, writing per-epoch checkpoints and structured evaluation outputs (per-utterance scores, summary tables, figures) to `res/`, the same way `scripts/run_ingest.py` (5.1) already does for data curation.
-2. **Aviation Information Extraction (Research Question 2).** Use an LLM to assist in curating aviation entity labels (callsigns, commands, altitudes, headings, frequencies) against a small manually-reviewed subset, then train a Named Entity Recognition (NER) model on the result, replacing the proxy metrics in 5.6 with real entity-level precision/recall/F1.
-3. **Standalone NER training/evaluation pipeline**, following the same reusable, notebook-free pattern as items 1 and the existing data-ingest pipeline.
-4. **Streamlit prototype application** (Section 2.1), integrating the trained ASR and NER pipelines into the real-time ATC audio analysis tool this project set out to build.
-
-**Update: full-dataset ASR experiments (to be folded into 5.2-5.4 when this section is rewritten).** Sections 5.4 and 5.8 above describe the 1,000-row prototype fine-tune. The standalone pipeline (`scripts/run_asr_train.py`) has since trained on all 13,956 training rows and scored the full 1,909-utterance test split; the complete comparison, with bootstrap confidence intervals and paired tests, is generated by `python scripts/summarize_asr_experiments.py` into `data/processed/asr_results/experiments_summary.md` (that folder is gitignored; the script regenerates it from the per-utterance results).
-
-| Model (full test split) | Overall WER | Real audio WER | Simulated audio WER | Train time |
-|---|---|---|---|---|
-| whisper-small.en, zero-shot | 42.2% | 61.3% | 28.8% | – |
-| whisper-medium.en, zero-shot | 35.7% | 53.6% | 23.1% | – |
-| `jacktol/whisper-medium.en-fine-tuned-for-ATC` (off the shelf) | 12.4% | 9.1% | 14.8% | – |
-| whisper-small.en, full fine-tune, 3 epochs | 5.4% | 10.9% | 1.5% | 57 min |
-| whisper-small.en, full fine-tune, up to 8 epochs (best epoch 6) | 4.9% | 9.7% | 1.4% | 154 min |
-| **whisper-medium.en + LoRA (r=32), 3 epochs** | **3.8%** | **7.5%** | **1.2%** | 239 min |
-
-The 3-epoch medium LoRA model is the current ASR model and the one used to prototype the Streamlit application. Its real-audio advantage over the off-the-shelf ATC model is statistically significant (-1.5 points, 95% CI -2.4 to -0.6). Training the small model for 8 epochs instead of 3 gave only a marginal gain at 2.7 times the cost, so it was not carried forward. Real audio remains the harder domain (simulated ATCOSIM is 57% of the test split and flatters the overall figure), and the earlier limitation about unverified train/test overlap for the off-the-shelf model still applies.
-
-**Future enhancement (hypothesis, not yet tested):** the LoRA model's validation WER was still falling when training stopped at epoch 3 (8.5%, 5.7%, 4.3% at epochs 1 to 3), unlike the small model, which had plateaued by epoch 4 to 6. The working hypothesis is that training the LoRA model for about 8 epochs would yield additional gains, most likely on real audio. Caveats: the small model's extra epochs showed diminishing returns, validation loss began to rise after epoch 3 in that run, and the LoRA learning rate (5e-4) was a single untuned choice. The experiment would cost roughly 10 GPU-hours on the development GPU (239 minutes for 3 epochs); a learning-rate comparison and a higher LoRA rank are natural companions.
+1. **Streamlit prototype application (ClearanceIQ)**, integrating the ASR and NER models (5.11) into the ATC audio analysis tool described in Section 2.1. Open design decisions: live against recorded input, voice-activity splitting of long recordings, entity colors and clearance-card layout, and raw against cleaned transcript display.
+2. **Train the LoRA model for about 8 epochs (hypothesis, not yet tested).** The LoRA model's validation WER was still falling at epoch 3 (8.5%, 5.7%, 4.3%), unlike the small model, which plateaued by epochs 4-6 (validation loss rose after epoch 3). The small model's extra epochs gave only a marginal gain, the LoRA learning rate (5e-4) was a single untuned choice, and the run would cost about 10 GPU-hours (239 minutes for 3 epochs). A learning-rate comparison and a higher rank are natural companions.
+3. **Human review of the 4,865 flagged NER utterances**, rare labels first, then retrain the students on the larger human-verified set.
+4. **Fine-tune with 6-8 s encoder windows** so the floor drops below 10 s (the encoder would shrink a further 30-40%), and benchmark on the real target devices, including 2-thread configurations.
 
 ---
 
@@ -568,6 +794,16 @@ Hofbauer, K., Petrik, S., & Hering, H. (2008). The ATCOSIM corpus of non-prompte
 jacktol. (n.d.). *ATC-ASR-Dataset* [Data set]. Hugging Face. https://huggingface.co/datasets/jacktol/ATC-ASR-Dataset
 
 jacktol. (n.d.). *whisper-medium.en-fine-tuned-for-ATC* [Model]. Hugging Face. https://huggingface.co/jacktol/whisper-medium.en-fine-tuned-for-ATC
+
+Hu, E. J., Shen, Y., Wallis, P., Allen-Zhu, Z., Li, Y., Wang, S., Wang, L., & Chen, W. (2021). *LoRA: Low-rank adaptation of large language models* (arXiv:2106.09685). arXiv. https://arxiv.org/abs/2106.09685
+
+Klein, G., Hernandez, F., Nguyen, V., & Senellart, J. (2020). The OpenNMT neural machine translation toolkit: 2020 edition. In *Proceedings of the 14th Conference of the Association for Machine Translation in the Americas (AMTA 2020)*. (CTranslate2.)
+
+Kwon, W., Li, Z., Zhuang, S., Sheng, Y., Zheng, L., Yu, C. H., Gonzalez, J. E., Zhang, H., & Stoica, I. (2023). Efficient memory management for large language model serving with PagedAttention. In *Proceedings of the 29th ACM Symposium on Operating Systems Principles*. (vLLM.)
+
+Honnibal, M., Montani, I., Van Landeghem, S., & Boyd, A. (2020). *spaCy: Industrial-strength natural language processing in Python* [Computer software]. https://spacy.io/
+
+Mangrulkar, S., Gugger, S., Debut, L., Belkada, Y., Paul, S., & Bossan, B. (2022). *PEFT: State-of-the-art parameter-efficient fine-tuning methods* [Computer software]. https://github.com/huggingface/peft
 
 Jitsi. (n.d.). *jiwer: Evaluate your speech-to-text transcriptions* [Computer software]. GitHub. https://github.com/jitsi/jiwer
 
