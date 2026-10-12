@@ -1,0 +1,16 @@
+# Conda environment for the capstone (notebooks, scripts, pipeline).
+# Create/update it with ./setup.sh, or manually: conda env create -f environment.yml
+#
+# Python is pinned to 3.12 because torch==2.7.1 / torchvision==0.22.1 (+cu128) are pinned for Python 3.12.
+# cu128 supports both older GPUs and Blackwell (RTX 50-series). The env name matches the notebooks' kernelspec.
+name: data-science
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12.12
+  - pip
+  - ipykernel  # needed to register the Jupyter kernel (done by setup.sh)
+  - pip:
+      # Lets pip pick the +cu128 builds of torch/torchvision pinned in requirements.txt
+      - --extra-index-url https://download.pytorch.org/whl/cu128
+      - -r requirements.txt

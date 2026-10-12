@@ -4,6 +4,25 @@
 - [x] Create run script for kicking off data curation and ingest process so that it doesn't have to be ran via notebook.
 - [x] Add optional post-process purge flag so that large raw datasets are removed from local file system after processing is complete.
 
+## Setup
+
+The project requires **Python 3.12** (pinned to 3.12.12): the pinned `torch==2.7.1` and
+`torchvision==0.22.1` (`+cu128`) builds are validated on it (cu128 is needed for Blackwell/RTX 50-series GPUs and also runs on older ones), and an unpinned
+or mismatched torchvision fails at import with `operator torchvision::nms does not exist`.
+
+```bash
+./setup.sh
+conda activate data-science
+```
+
+`setup.sh` creates the conda environment defined in `environment.yml` (or updates it in
+place if it already exists, so it is safe to re-run after `requirements.txt` changes) and
+registers it as a Jupyter kernel named `data-science`, matching the notebooks' kernelspec,
+so it appears in Jupyter and VS Code without manual `ipykernel` setup. If
+you already have a `data-science` env on a different Python version, remove it first with
+`conda env remove -n data-science`. Non-conda users can use `pyenv`/`uv`, which read
+`.python-version`, then `pip install --extra-index-url https://download.pytorch.org/whl/cu128 -r requirements.txt`.
+
 ## Running the pipeline from the command line
 
 `run-pipeline.sh` is the single entry point for the project's pipeline (data ingest today;

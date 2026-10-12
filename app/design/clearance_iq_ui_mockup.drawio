@@ -1,0 +1,48 @@
+<mxfile host="65bd71144e">
+    <diagram id="uo7-udLLE3PGXCuqAFGB" name="Landing Page">
+        <mxGraphModel grid="1" page="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" pageScale="1" pageWidth="1100" pageHeight="850" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="5x4xzTgZs757yiOV4bTq-1" parent="1" style="strokeWidth=1;shadow=0;dashed=0;align=center;html=1;shape=mxgraph.mockup.containers.browserWindow;rSize=0;strokeColor=#666666;strokeColor2=#008cff;strokeColor3=#c4c4c4;mainText=,;recursiveResize=0;fontStyle=1" value="" vertex="1">
+                    <mxGeometry height="850" width="1100" as="geometry"/>
+                </mxCell>
+                <mxCell id="5x4xzTgZs757yiOV4bTq-2" parent="5x4xzTgZs757yiOV4bTq-1" style="strokeWidth=1;shadow=0;dashed=0;align=center;html=1;shape=mxgraph.mockup.containers.anchor;fontSize=17;fontColor=#666666;align=left;whiteSpace=wrap;" value="ClearanceIQ" vertex="1">
+                    <mxGeometry height="26" width="110" x="60" y="12" as="geometry"/>
+                </mxCell>
+                <mxCell id="5x4xzTgZs757yiOV4bTq-3" parent="5x4xzTgZs757yiOV4bTq-1" style="strokeWidth=1;shadow=0;dashed=0;align=center;html=1;shape=mxgraph.mockup.containers.anchor;rSize=0;fontSize=17;fontColor=#666666;align=left;" value="https://clearanceiq.com" vertex="1">
+                    <mxGeometry height="26" width="250" x="130" y="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="Pf2pnH30szqmS3QFBvT5-1" parent="5x4xzTgZs757yiOV4bTq-1" style="strokeWidth=1;shadow=0;dashed=0;align=center;html=1;shape=mxgraph.mockup.buttons.button;strokeColor=#666666;fontColor=#ffffff;mainText=;buttonStyle=round;fontSize=17;fontStyle=1;fillColor=#008cff;whiteSpace=wrap;" value="Start" vertex="1">
+                    <mxGeometry height="50" width="150" x="475" y="500" as="geometry"/>
+                </mxCell>
+                <mxCell id="Pf2pnH30szqmS3QFBvT5-2" parent="5x4xzTgZs757yiOV4bTq-1" style="text;html=1;whiteSpace=wrap;overflow=hidden;rounded=0;align=center;" value="&lt;h1 style=&quot;margin-top: 0px;&quot;&gt;Welcome!&lt;/h1&gt;&lt;p&gt;[PROFESSIONAL GREETING AND HIGH LEVEL APP INFO HERE]&lt;/p&gt;" vertex="1">
+                    <mxGeometry height="150" width="360" x="370" y="290" as="geometry"/>
+                </mxCell>
+                <mxCell id="Pf2pnH30szqmS3QFBvT5-3" parent="5x4xzTgZs757yiOV4bTq-1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;fontStyle=1;fontSize=32;" value="ClearanceIQ" vertex="1">
+                    <mxGeometry height="50" width="260" x="420" y="150" as="geometry"/>
+                </mxCell>
+                <mxCell id="Pf2pnH30szqmS3QFBvT5-4" parent="5x4xzTgZs757yiOV4bTq-1" style="shape=callout;whiteSpace=wrap;html=1;perimeter=calloutPerimeter;position2=0;align=left;verticalAlign=top;labelBackgroundColor=none;fillColor=#FFB366;strokeColor=#d79b00;fontSize=16;" value="NOTE: Clicking start should trigger a fade transition to the home page." vertex="1">
+                    <mxGeometry height="110" width="280" x="630" y="390" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+    <diagram name="Home Page" id="qpdz85mlyrrvZFxMInCC">
+        <mxGraphModel dx="1501" dy="1122" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1100" pageHeight="850" math="0" shadow="0">
+            <root>
+                <mxCell id="qntC6L2uaAsTinMZ8gFf-0"/>
+                <mxCell id="qntC6L2uaAsTinMZ8gFf-1" parent="qntC6L2uaAsTinMZ8gFf-0"/>
+                <mxCell id="qntC6L2uaAsTinMZ8gFf-2" parent="qntC6L2uaAsTinMZ8gFf-1" style="strokeWidth=1;shadow=0;dashed=0;align=center;html=1;shape=mxgraph.mockup.containers.browserWindow;rSize=0;strokeColor=#666666;strokeColor2=#008cff;strokeColor3=#c4c4c4;mainText=,;recursiveResize=0;" value="" vertex="1">
+                    <mxGeometry height="850" width="1100" as="geometry"/>
+                </mxCell>
+                <mxCell id="qntC6L2uaAsTinMZ8gFf-3" parent="qntC6L2uaAsTinMZ8gFf-2" style="strokeWidth=1;shadow=0;dashed=0;align=center;html=1;shape=mxgraph.mockup.containers.anchor;fontSize=17;fontColor=#666666;align=left;whiteSpace=wrap;" value="ClearanceIQ" vertex="1">
+                    <mxGeometry height="26" width="110" x="60" y="12" as="geometry"/>
+                </mxCell>
+                <mxCell id="qntC6L2uaAsTinMZ8gFf-4" parent="qntC6L2uaAsTinMZ8gFf-2" style="strokeWidth=1;shadow=0;dashed=0;align=center;html=1;shape=mxgraph.mockup.containers.anchor;rSize=0;fontSize=17;fontColor=#666666;align=left;" value="https://clearanceiq.com" vertex="1">
+                    <mxGeometry height="26" width="250" x="130" y="60" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+</mxfile>
