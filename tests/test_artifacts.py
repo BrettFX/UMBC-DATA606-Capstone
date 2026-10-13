@@ -249,9 +249,13 @@ def test_collect_results_part_ships_every_runs_results_and_no_model_files(tmp_pa
     for name in ("finetuned_whisper-small-en_full-8ep.csv", "comparison_whisper_small_en_zeroshot_full_test.csv", "experiments_summary.md",
                  "combined_asr_results.csv"):
         touch(repo / "data/processed/asr_results" / name)
+    touch(repo / "models/whisper-small-en-atc-finetuned-full-8ep/train_metrics.json", "{}")
+    touch(repo / "models/whisper-small-en-atc-finetuned-full-8ep/final/model.safetensors")
     keys = {i.rel_key for i in artifacts.collect("asr", repo, None, ["test_results"])}
     assert keys == {"test_results/finetuned_whisper-small-en_full.csv", "test_results/finetuned_whisper-small-en_full-8ep.csv",
-                    "test_results/comparison_whisper_small_en_zeroshot_full_test.csv", "test_results/experiments_summary.md"}  # no combined_*
+                    "test_results/comparison_whisper_small_en_zeroshot_full_test.csv", "test_results/experiments_summary.md",  # no combined_*
+                    "whisper-small-en-atc-finetuned-full/test_scores.json",  # every run's metrics, but no weights
+                    "whisper-small-en-atc-finetuned-full-8ep/train_metrics.json"}
 
 
 def test_results_upload_is_unchanged_once_latest_holds_every_file_whatever_their_contents(tmp_path):
@@ -276,10 +280,20 @@ def test_collect_ner_data_part_ships_annotations_and_curated_files_only(tmp_path
     for rel in ("annotations/annotations_abc.jsonl", "annotations/manifest_abc.json", "annotations/progress_abc.json",
                 "curated/manifest.json", "curated/train.jsonl", "curated/heldout.jsonl"):
         touch(base / rel)
+    for rel in ("annotator_comparison.json", "llm_annotations_def.jsonl", "train.jsonl"):  # train.jsonl is regenerated, not shipped
+        touch(base / rel)
     keys = {i.rel_key for i in artifacts.collect("ner", repo, None, ["ner_data"])}
     assert keys == {f"data/{r}" for r in ("annotations/annotations_abc.jsonl", "annotations/manifest_abc.json", "annotations/progress_abc.json",
-                                          "curated/manifest.json", "curated/train.jsonl", "curated/heldout.jsonl")}
+                                          "curated/manifest.json", "curated/train.jsonl", "curated/heldout.jsonl",
+                                          "annotator_comparison.json", "llm_annotations_def.jsonl")}
     lp = lambda k: artifacts.local_path("ner", k, repo).relative_to(repo).as_posix()
     assert lp("data/annotations/annotations_abc.jsonl") == "data/processed/ner_dataset/annotations/annotations_abc.jsonl"
     assert lp("data/curated/manifest.json") == "data/processed/ner_dataset/curated/manifest.json"
     assert not any(k.startswith(("spacy", "bert")) for k in keys)  # no model files
+
+
+def test_collect_ner_variants_ship_every_listed_model_with_its_results(tmp_path):
+    repo = make_repo(tmp_path)
+    keys = {i.rel_key for i in artifacts.collect("ner", repo, ["spacy", "bert"])}
+    assert {"spacy/model-best/ner/model", "spacy/results.json", "bert/model-best/model.safetensors"} <= keys
+    assert not any("checkpoint" in k for k in keys)

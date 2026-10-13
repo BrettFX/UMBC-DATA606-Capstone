@@ -41,8 +41,10 @@ def collect(task: str, repo_root: Path, variants: list[str] | None = None, parts
 
     `parts` (ASR only, except "ner_data") restricts the upload to named sub-folders of each model directory, e.g. ["ct2-int8"] for the
     CTranslate2 copy on its own (then the training configs and scores are left out). `parts=["test_results"]` selects only the
-    per-utterance results CSVs in data/processed/asr_results/, from every run, and no model files. For task 'ner',
-    `parts=["ner_data"]` selects only data/processed/ner_dataset/annotations/ and curated/, and no model files.
+    per-utterance results CSVs in data/processed/asr_results/ and every run's training metrics, config and scores, and no
+    weights. For task 'ner',
+    `parts=["ner_data"]` selects only data/processed/ner_dataset/annotations/ and curated/ plus the notebook's cached LLM
+    runs, and no model files.
     """
     items: list[Item] = []
     if task == "asr" and parts == list(RESULTS_PART):
@@ -52,7 +54,13 @@ def collect(task: str, repo_root: Path, variants: list[str] | None = None, parts
         # are re-derived by the notebook from these, so they are left out.
         results = repo_root / "data/processed/asr_results"
         files = sorted([*results.glob("*.csv"), *results.glob("experiments_summary.md")])
-        return [Item(p, f"test_results/{p.name}") for p in files if not p.name.startswith("combined_asr_")]
+        items = [Item(p, f"test_results/{p.name}") for p in files if not p.name.startswith("combined_asr_")]
+        # Each run's training curves, config and test scores (small; the validation-curve figure reads them for every run,
+        # including runs whose weights are not shipped).
+        for model_dir in sorted((repo_root / "models").glob("*-atc-finetuned-full*")):
+            items += [Item(model_dir / f, f"{model_dir.name}/{f}") for f in ("train_config.json", "train_metrics.json", "test_scores.json")
+                      if (model_dir / f).exists()]
+        return items
     if task == "asr":
         results = repo_root / "data/processed/asr_results"
         for model_dir in sorted((repo_root / "models").glob("*-atc-finetuned-full*")):
@@ -81,6 +89,10 @@ def collect(task: str, repo_root: Path, variants: list[str] | None = None, parts
         for sub in ("annotations", "curated"):
             if (ner_data / sub).is_dir():
                 items += _tree(ner_data / sub, f"data/{sub}")
+        # The notebook's cached LLM runs (the annotator comparison and the prototype annotation sample); losing them means
+        # re-running the models. The splits, exports and smoke-test model it writes next to them are cheap to regenerate.
+        items += [Item(p, f"data/{p.name}") for p in sorted([ner_data / "annotator_comparison.json", *ner_data.glob("llm_annotations_*.jsonl")])
+                  if p.exists()]
     elif task == "ner":
         for model_dir in sorted((repo_root / "models" / "ner").glob("*")):
             if not model_dir.is_dir() or (variants and model_dir.name not in variants):

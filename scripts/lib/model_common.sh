@@ -10,6 +10,7 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 #            only on the device that produced them), needed by the notebook's analysis; any device profile  ~3 MB
 #   ner-data the full-corpus NER annotation run and curated training dataset (data/processed/ner_dataset/annotations/ and
 #            curated/; gitignored, hours of LLM time to regenerate), needed by the notebook's NER analysis    ~MBs
+#   ner-variants  the other NER models the notebook compares (spacy, bert, bert-balanced; default download only)     ~MBs-GBs
 #   ner      the spaCy NER model                                                          ~4 MB
 SHIP_MODELS=(
     "asr|asr|lora-whisper-medium-en|whisper-medium-en-atc-finetuned-full-lora|"
@@ -17,6 +18,7 @@ SHIP_MODELS=(
     "asr-results|asr|asr-results|asr_results|test_results"
     "ner-data|ner|ner-data|ner_dataset|ner_data"
     "ner|ner|spacy-balanced|spacy-balanced|"
+    "ner-variants|ner|ner-variants|spacy bert bert-balanced|"
 )
 # Device profiles for downloading: which groups a device needs.
 PROFILE_CPU="asr-ct2 asr-results ner-data ner"   # no GPU: the CTranslate2 model (no torch needed) + NER
@@ -62,7 +64,7 @@ select_models() {
         if [[ -n "$wanted" && " $wanted " != *" $group "* ]]; then continue; fi
         echo "$row"; found=1
     done
-    [[ "$found" -eq 1 ]] || { echo "No model matches '${only:-$profile}' (groups: asr, asr-ct2, asr-results, ner-data, ner)." >&2; return 1; }
+    [[ "$found" -eq 1 ]] || { echo "No model matches '${only:-$profile}' (groups: asr, asr-ct2, asr-results, ner-data, ner, ner-variants)." >&2; return 1; }
 }
 
 # Arguments common to every model_store.py call.
