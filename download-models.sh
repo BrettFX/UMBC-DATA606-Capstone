@@ -11,7 +11,7 @@
 #   ./download-models.sh                    # everything: full ASR model, CTranslate2 ASR model, NER
 #   ./download-models.sh --profile cpu      # a device without a GPU: CTranslate2 ASR model + NER (~0.8 GB)
 #   ./download-models.sh --profile gpu      # a device with a GPU: full ASR model + NER (~1.5 GB)
-#   ./download-models.sh --only ner         # one group: asr, asr-ct2, asr-results, ner-data, ner or ner-variants
+#   ./download-models.sh --only ner         # one group: asr, asr-ct2, asr-small-8ep, asr-results, ner-data, ner or ner-variants
 #   ./download-models.sh --dry-run          # show what would be downloaded, write nothing
 #   ./download-models.sh --only asr --run-id 20261006-112237     # a specific run instead of latest
 #   ./download-models.sh --force            # overwrite local files that differ
@@ -26,7 +26,7 @@ only="" profile="" run_id="" dest_root="" force=0 dry=0
 usage() { sed -n '2,/^set -euo/p' "${BASH_SOURCE[0]}" | sed '$d' | sed 's/^# \{0,1\}//'; }
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --only) only="${2:?--only needs asr, asr-ct2, asr-results, ner-data, ner or ner-variants}"; shift 2 ;;
+        --only) only="${2:?--only needs asr, asr-ct2, asr-small-8ep, asr-results, ner-data, ner or ner-variants}"; shift 2 ;;
         --profile) profile="${2:?--profile needs cpu or gpu}"; shift 2 ;;
         --run-id) run_id="${2:?--run-id needs a value}"; shift 2 ;;
         --dest-root) dest_root="${2:?--dest-root needs a directory}"; shift 2 ;;

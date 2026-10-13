@@ -10,7 +10,7 @@
 #
 # Usage:
 #   ./upload-models.sh                      # show the plan, ask, then upload ASR + NER
-#   ./upload-models.sh --only asr-ct2       # one group: asr, asr-ct2, asr-results, ner-data, ner or ner-variants
+#   ./upload-models.sh --only asr-ct2       # one group: asr, asr-ct2, asr-small-8ep, asr-results, ner-data, ner or ner-variants
 #   ./upload-models.sh --dry-run            # show the plan only
 #   ./upload-models.sh --yes                # no confirmation prompt (for scripts)
 #   ./upload-models.sh --no-latest          # upload the run but leave `latest` where it is
@@ -24,7 +24,7 @@ only="" run_id="" yes=0 dry=0 latest=1
 usage() { sed -n '2,/^set -euo/p' "${BASH_SOURCE[0]}" | sed '$d' | sed 's/^# \{0,1\}//'; }
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --only) only="${2:?--only needs asr, asr-ct2, asr-results, ner-data, ner or ner-variants}"; shift 2 ;;
+        --only) only="${2:?--only needs asr, asr-ct2, asr-small-8ep, asr-results, ner-data, ner or ner-variants}"; shift 2 ;;
         --run-id) run_id="${2:?--run-id needs a value}"; shift 2 ;;
         --yes) yes=1; shift ;;
         --dry-run) dry=1; shift ;;
