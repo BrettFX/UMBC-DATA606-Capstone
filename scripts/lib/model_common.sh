@@ -8,16 +8,19 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 #   asr-ct2  the same model converted to CTranslate2 int8, all a CPU device needs        ~0.8 GB
 #   asr-results  every per-utterance ASR results CSV in data/processed/asr_results/ (all runs; gitignored, so otherwise
 #            only on the device that produced them), needed by the notebook's analysis; any device profile  ~3 MB
+#   ner-data the full-corpus NER annotation run and curated training dataset (data/processed/ner_dataset/annotations/ and
+#            curated/; gitignored, hours of LLM time to regenerate), needed by the notebook's NER analysis    ~MBs
 #   ner      the spaCy NER model                                                          ~4 MB
 SHIP_MODELS=(
     "asr|asr|lora-whisper-medium-en|whisper-medium-en-atc-finetuned-full-lora|"
     "asr-ct2|asr|lora-whisper-medium-en-ct2-int8|whisper-medium-en-atc-finetuned-full-lora|ct2-int8"
     "asr-results|asr|asr-results|asr_results|test_results"
+    "ner-data|ner|ner-data|ner_dataset|ner_data"
     "ner|ner|spacy-balanced|spacy-balanced|"
 )
 # Device profiles for downloading: which groups a device needs.
-PROFILE_CPU="asr-ct2 asr-results ner"   # no GPU: the CTranslate2 model (no torch needed) + NER
-PROFILE_GPU="asr asr-results ner"       # GPU: the full-precision model + NER
+PROFILE_CPU="asr-ct2 asr-results ner-data ner"   # no GPU: the CTranslate2 model (no torch needed) + NER
+PROFILE_GPU="asr asr-results ner-data ner"       # GPU: the full-precision model + NER
 
 # The conda environment the project's dependencies (boto3, spaCy, transformers, ...) live in. Override if yours differs.
 CONDA_ENV_NAME="${PIPELINE_CONDA_ENV:-data-science}"
@@ -59,7 +62,7 @@ select_models() {
         if [[ -n "$wanted" && " $wanted " != *" $group "* ]]; then continue; fi
         echo "$row"; found=1
     done
-    [[ "$found" -eq 1 ]] || { echo "No model matches '${only:-$profile}' (groups: asr, asr-ct2, asr-results, ner)." >&2; return 1; }
+    [[ "$found" -eq 1 ]] || { echo "No model matches '${only:-$profile}' (groups: asr, asr-ct2, asr-results, ner-data, ner)." >&2; return 1; }
 }
 
 # Arguments common to every model_store.py call.

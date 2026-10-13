@@ -268,3 +268,18 @@ def test_results_upload_is_unchanged_once_latest_holds_every_file_whatever_their
     assert artifacts.unchanged_vs_latest(s3, latest, fresh()) == "r1"
     touch(repo / "data/processed/asr_results/comparison_whisper_small_en_zeroshot_full_test.csv")  # a file latest/ lacks
     assert artifacts.unchanged_vs_latest(s3, latest, fresh()) is None
+
+
+def test_collect_ner_data_part_ships_annotations_and_curated_files_only(tmp_path):
+    repo = make_repo(tmp_path)
+    base = repo / "data/processed/ner_dataset"
+    for rel in ("annotations/annotations_abc.jsonl", "annotations/manifest_abc.json", "annotations/progress_abc.json",
+                "curated/manifest.json", "curated/train.jsonl", "curated/heldout.jsonl"):
+        touch(base / rel)
+    keys = {i.rel_key for i in artifacts.collect("ner", repo, None, ["ner_data"])}
+    assert keys == {f"data/{r}" for r in ("annotations/annotations_abc.jsonl", "annotations/manifest_abc.json", "annotations/progress_abc.json",
+                                          "curated/manifest.json", "curated/train.jsonl", "curated/heldout.jsonl")}
+    lp = lambda k: artifacts.local_path("ner", k, repo).relative_to(repo).as_posix()
+    assert lp("data/annotations/annotations_abc.jsonl") == "data/processed/ner_dataset/annotations/annotations_abc.jsonl"
+    assert lp("data/curated/manifest.json") == "data/processed/ner_dataset/curated/manifest.json"
+    assert not any(k.startswith(("spacy", "bert")) for k in keys)  # no model files

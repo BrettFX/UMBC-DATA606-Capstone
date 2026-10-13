@@ -19,6 +19,7 @@ from pathlib import Path
 
 
 RESULTS_PART = ("test_results",)  # `parts` value that selects only the ASR results files, no model
+NER_DATA_PART = ("ner_data",)  # `parts` value that selects only the NER annotation and curated-dataset files, no model
 
 
 @dataclass(frozen=True)
@@ -38,9 +39,10 @@ def _tree(root: Path, rel_root: str) -> list[Item]:
 def collect(task: str, repo_root: Path, variants: list[str] | None = None, parts: list[str] | None = None) -> list[Item]:
     """Files to upload for `task` ('asr' or 'ner'): final models, their configs and scores, never checkpoints.
 
-    `parts` (ASR only) restricts the upload to named sub-folders of each model directory, e.g. ["ct2-int8"] for the
+    `parts` (ASR only, except "ner_data") restricts the upload to named sub-folders of each model directory, e.g. ["ct2-int8"] for the
     CTranslate2 copy on its own (then the training configs and scores are left out). `parts=["test_results"]` selects only the
-    per-utterance results CSVs in data/processed/asr_results/, from every run, and no model files.
+    per-utterance results CSVs in data/processed/asr_results/, from every run, and no model files. For task 'ner',
+    `parts=["ner_data"]` selects only data/processed/ner_dataset/annotations/ and curated/, and no model files.
     """
     items: list[Item] = []
     if task == "asr" and parts == list(RESULTS_PART):
@@ -71,6 +73,14 @@ def collect(task: str, repo_root: Path, variants: list[str] | None = None, parts
         if not parts:
             items += [Item(results / name, f"test_results/{name}") for name in ("experiments_summary.md", "experiments_summary.csv")
                       if (results / name).exists()]  # the cross-model comparison table, for context
+    elif task == "ner" and parts == list(NER_DATA_PART):
+        # The full-corpus annotation run (hours of LLM time; resumable cache, manifest, progress) and the curated training
+        # dataset derived from it. Gitignored and only on the device that produced them, and the notebook's NER analysis
+        # reads them, so they ship as their own entry that every device profile can restore.
+        ner_data = repo_root / "data/processed/ner_dataset"
+        for sub in ("annotations", "curated"):
+            if (ner_data / sub).is_dir():
+                items += _tree(ner_data / sub, f"data/{sub}")
     elif task == "ner":
         for model_dir in sorted((repo_root / "models" / "ner").glob("*")):
             if not model_dir.is_dir() or (variants and model_dir.name not in variants):
@@ -143,9 +153,9 @@ def unchanged_vs_latest(client, latest_uri: str, manifest: dict) -> str | None:
     """The run id `latest/` already holds if its model files match `manifest`'s checksums, else None.
 
     Only the model weights and configs are compared (keys under final/, final-adapter/ or model-best/), so
-    regenerating a metrics table or results file does not count as a new model. A results-only manifest (no model files)
-    is unchanged when `latest/` already holds every one of its results files, whatever their contents, so newly produced
-    results get backed up but regenerated ones do not create a new run.
+    regenerating a metrics table or results file does not count as a new model. A data-only manifest (no model files)
+    is unchanged when `latest/` already holds every one of its files, whatever their contents, so newly produced files
+    get backed up but regenerated ones do not create a new run.
     """
     bucket, prefix = split_s3_uri(latest_uri)
     try:
@@ -156,9 +166,9 @@ def unchanged_vs_latest(client, latest_uri: str, manifest: dict) -> str | None:
     local_files, remote_files = pick(manifest), pick(remote)
     if local_files:
         same = local_files == remote_files
-    else:  # a results-only upload has no model files: it is unchanged once latest/ holds every results file
-        results = lambda m: {f["key"] for f in m["files"] if f["key"].startswith("test_results/")}
-        same = bool(results(manifest)) and results(manifest) <= results(remote)
+    else:  # a data-only upload (results, annotations) has no model files: it is unchanged once latest/ holds every one of its files
+        keys = lambda m: {f["key"] for f in m["files"]}
+        same = bool(keys(manifest)) and keys(manifest) <= keys(remote)
     return remote.get("run_id") if same else None
 
 

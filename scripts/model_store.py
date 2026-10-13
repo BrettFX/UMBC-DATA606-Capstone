@@ -44,7 +44,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     common(up, "Folder for this upload (default: a UTC timestamp).")
     up.add_argument("--variants", nargs="+", default=None, help="Only these local model directories (e.g. spacy-balanced).")
     up.add_argument("--parts", nargs="+", default=None,
-                    help="ASR only: upload just these sub-folders of the model directory (e.g. ct2-int8) and no metrics files.")
+                    help="Upload just these parts: for ASR, sub-folders of the model directory (e.g. ct2-int8) and no metrics files, or test_results for only the results CSVs; for NER, ner_data for only the annotation run and curated dataset.")
     up.add_argument("--set-latest", action="store_true", help="Also make this run the model's `latest/`.")
     up.add_argument("--skip-if-unchanged", action="store_true",
                     help="Do nothing if the model files already match the current `latest/` run (avoids duplicate runs).")
