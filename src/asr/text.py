@@ -1,5 +1,5 @@
 """Scoring-time text normalization, moved from the machine learning notebook so every ASR comparison
-(baseline, off-the-shelf fine-tune, our fine-tune) is scored identically."""
+(baseline, off-the-shelf jacktol medium.en, fine-tuned whisper-small.en) is scored identically."""
 
 import re
 

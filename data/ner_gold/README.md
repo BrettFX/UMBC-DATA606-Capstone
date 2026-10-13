@@ -7,7 +7,7 @@ Label schema and guidelines live in `src/ner/` (`schema.py`, `prompt.py`). Entit
 
 | file | utterances | what it is |
 |---|---|---|
-| `gold.jsonl` | 41 | the original hand-labeled set. Left untouched: the NER notebook's cached ablation results depend on it |
+| `gold.jsonl` | 41 | the original hand-labeled set. Left untouched: the NER notebook's cached comparison results depend on it |
 | `gold_expanded.jsonl` | 95 | `gold.jsonl` + 54 utterances reviewed by the project author (34 adjudicated disagreements, 20 audit items with labels shown). Human-verified. Used for tuning and few-shot retrieval |
 | `silver.jsonl` | 167 | labeled by two annotators (Claude, blind; and the 9B model) and **not** reviewed by a human: 112 where they agreed, 55 where the disagreement was explained by a decided guideline. Fine for training, not for evaluation |
 | `heldout_gold.jsonl` | 100 | random validation/test utterances, never used for tuning or few-shot retrieval. 38 human-adjudicated, 62 agreed by both annotators. **Frozen: do not tune on it.** One span is flagged `needs_confirmation` |

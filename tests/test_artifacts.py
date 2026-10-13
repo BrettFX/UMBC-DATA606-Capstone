@@ -102,7 +102,7 @@ def test_collect_asr_selected_variant_takes_its_own_results_and_adapter(tmp_path
     keys = {i.rel_key for i in artifacts.collect("asr", repo, ["whisper-medium-en-atc-finetuned-full-lora"])}
     assert "whisper-medium-en-atc-finetuned-full-lora/final-adapter/adapter_model.safetensors" in keys
     assert "test_results/finetuned_whisper-medium-en_full-lora.csv" in keys and "test_results/experiments_summary.md" in keys
-    assert "test_results/finetuned_whisper-small-en_full-8ep.csv" not in keys  # another run's results are not dragged along
+    assert "test_results/finetuned_whisper-small-en_full-8ep.csv" not in keys  # another run's results come via the asr-results group
     assert not any("checkpoint" in k or k.startswith("whisper-small") for k in keys)
 
 
@@ -242,3 +242,29 @@ def test_unchanged_check_covers_the_ct2_folder(tmp_path):
     assert artifacts.unchanged_vs_latest(s3, f"s3://bucket/{prefix}/latest", fresh()) is not None
     touch(repo / "models/whisper-small-en-atc-finetuned-full/ct2-int8/model.bin", "weights-v2")  # reconverted: a new model
     assert artifacts.unchanged_vs_latest(s3, f"s3://bucket/{prefix}/latest", fresh()) is None
+
+
+def test_collect_results_part_ships_every_runs_results_and_no_model_files(tmp_path):
+    repo = make_repo(tmp_path)
+    for name in ("finetuned_whisper-small-en_full-8ep.csv", "comparison_whisper_small_en_zeroshot_full_test.csv", "experiments_summary.md",
+                 "combined_asr_results.csv"):
+        touch(repo / "data/processed/asr_results" / name)
+    keys = {i.rel_key for i in artifacts.collect("asr", repo, None, ["test_results"])}
+    assert keys == {"test_results/finetuned_whisper-small-en_full.csv", "test_results/finetuned_whisper-small-en_full-8ep.csv",
+                    "test_results/comparison_whisper_small_en_zeroshot_full_test.csv", "test_results/experiments_summary.md"}  # no combined_*
+
+
+def test_results_upload_is_unchanged_once_latest_holds_every_file_whatever_their_contents(tmp_path):
+    repo = make_repo(tmp_path)
+    csv = repo / "data/processed/asr_results/finetuned_whisper-small-en_full.csv"
+    collect = lambda: artifacts.collect("asr", repo, None, ["test_results"])
+    fresh = lambda: artifacts.build_manifest("asr", "r2", collect(), repo, "asr-results")
+    s3, prefix = FakeS3(), "ml-tasks/asr/asr-results"
+    artifacts.upload(collect(), artifacts.build_manifest("asr", "r1", collect(), repo, "asr-results"), f"s3://bucket/{prefix}/r1", s3)
+    artifacts.copy_prefix(s3, "bucket", f"{prefix}/r1", f"{prefix}/latest", replace=True)
+    latest = f"s3://bucket/{prefix}/latest"
+    assert artifacts.unchanged_vs_latest(s3, latest, fresh()) == "r1"
+    csv.write_text("re-scored")  # regenerated, not new: no new run
+    assert artifacts.unchanged_vs_latest(s3, latest, fresh()) == "r1"
+    touch(repo / "data/processed/asr_results/comparison_whisper_small_en_zeroshot_full_test.csv")  # a file latest/ lacks
+    assert artifacts.unchanged_vs_latest(s3, latest, fresh()) is None

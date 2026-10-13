@@ -5,10 +5,12 @@
 # which is what inference targets. A model whose files already match `latest` is skipped, so re-running this
 # never creates duplicate runs. It shows what it will upload and asks before sending anything (unless --yes).
 # Which models count as "the best" is listed in scripts/lib/model_common.sh.
+# The `asr-results` group uploads every ASR results CSV in data/processed/asr_results/ (all runs), so they can be restored on
+# another device.
 #
 # Usage:
 #   ./upload-models.sh                      # show the plan, ask, then upload ASR + NER
-#   ./upload-models.sh --only asr-ct2       # one group: asr, asr-ct2 or ner
+#   ./upload-models.sh --only asr-ct2       # one group: asr, asr-ct2, asr-results or ner
 #   ./upload-models.sh --dry-run            # show the plan only
 #   ./upload-models.sh --yes                # no confirmation prompt (for scripts)
 #   ./upload-models.sh --no-latest          # upload the run but leave `latest` where it is
@@ -22,7 +24,7 @@ only="" run_id="" yes=0 dry=0 latest=1
 usage() { sed -n '2,/^set -euo/p' "${BASH_SOURCE[0]}" | sed '$d' | sed 's/^# \{0,1\}//'; }
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --only) only="${2:?--only needs asr, asr-ct2 or ner}"; shift 2 ;;
+        --only) only="${2:?--only needs asr, asr-ct2, asr-results or ner}"; shift 2 ;;
         --run-id) run_id="${2:?--run-id needs a value}"; shift 2 ;;
         --yes) yes=1; shift ;;
         --dry-run) dry=1; shift ;;

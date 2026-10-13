@@ -18,6 +18,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
+RESULTS_PART = ("test_results",)  # `parts` value that selects only the ASR results files, no model
+
+
 @dataclass(frozen=True)
 class Item:
     source: Path
@@ -36,9 +39,18 @@ def collect(task: str, repo_root: Path, variants: list[str] | None = None, parts
     """Files to upload for `task` ('asr' or 'ner'): final models, their configs and scores, never checkpoints.
 
     `parts` (ASR only) restricts the upload to named sub-folders of each model directory, e.g. ["ct2-int8"] for the
-    CTranslate2 copy on its own (then the training configs, scores and results files are left out).
+    CTranslate2 copy on its own (then the training configs and scores are left out). `parts=["test_results"]` selects only the
+    per-utterance results CSVs in data/processed/asr_results/, from every run, and no model files.
     """
     items: list[Item] = []
+    if task == "asr" and parts == list(RESULTS_PART):
+        # Every run's per-utterance results (fine-tuned models, zero-shot and off-the-shelf comparisons, the prototype subset)
+        # plus the cross-model summary, shipped on their own so every device profile (GPU or CPU) can restore them. They are
+        # gitignored and exist only on the device that produced them, so S3 is their only backup. The combined_asr_* files
+        # are re-derived by the notebook from these, so they are left out.
+        results = repo_root / "data/processed/asr_results"
+        files = sorted([*results.glob("*.csv"), *results.glob("experiments_summary.md")])
+        return [Item(p, f"test_results/{p.name}") for p in files if not p.name.startswith("combined_asr_")]
     if task == "asr":
         results = repo_root / "data/processed/asr_results"
         for model_dir in sorted((repo_root / "models").glob("*-atc-finetuned-full*")):
@@ -131,7 +143,9 @@ def unchanged_vs_latest(client, latest_uri: str, manifest: dict) -> str | None:
     """The run id `latest/` already holds if its model files match `manifest`'s checksums, else None.
 
     Only the model weights and configs are compared (keys under final/, final-adapter/ or model-best/), so
-    regenerating a metrics table or results file does not count as a new model.
+    regenerating a metrics table or results file does not count as a new model. A results-only manifest (no model files)
+    is unchanged when `latest/` already holds every one of its results files, whatever their contents, so newly produced
+    results get backed up but regenerated ones do not create a new run.
     """
     bucket, prefix = split_s3_uri(latest_uri)
     try:
@@ -140,7 +154,12 @@ def unchanged_vs_latest(client, latest_uri: str, manifest: dict) -> str | None:
         return None
     pick = lambda m: {f["key"]: f["sha256"] for f in m["files"] if any(part in "/" + f["key"] for part in _MODEL_PARTS)}
     local_files, remote_files = pick(manifest), pick(remote)
-    return remote.get("run_id") if local_files and local_files == remote_files else None
+    if local_files:
+        same = local_files == remote_files
+    else:  # a results-only upload has no model files: it is unchanged once latest/ holds every results file
+        results = lambda m: {f["key"] for f in m["files"] if f["key"].startswith("test_results/")}
+        same = bool(results(manifest)) and results(manifest) <= results(remote)
+    return remote.get("run_id") if same else None
 
 
 def model_prefix(base: str, task: str, model_name: str) -> str:

@@ -26,7 +26,7 @@ from ner import (  # noqa: E402
 NER_DIR = REPO / "data" / "processed" / "ner_dataset"
 GOLD_PATH = REPO / "data" / "ner_gold" / "gold.jsonl"
 WORK = REPO / "data" / "ner_gold" / "work"  # intermediates: candidates, pre-labels, queues
-HF_BASELINE_KEY = "4B 4-bit | + constraints + hints"  # key in ablation_results.json
+HF_BASELINE_KEY = "4B 4-bit | + constraints + hints"  # key in annotator_comparison.json
 
 
 def main():
@@ -98,7 +98,7 @@ def main():
         exact = sum(set(entity_spans(g["text"], g["entities"])) == set(entity_spans(g["text"], preds[u]))
                     for u, g in gold.items())
         print(f"\nexact-match utterances: {exact}/{len(gold)}")
-        abl = NER_DIR / "ablation_results.json"
+        abl = NER_DIR / "annotator_comparison.json"
         if abl.exists() and HF_BASELINE_KEY in (cache := json.load(open(abl))):
             hf = cache[HF_BASELINE_KEY]
             hf_exact = sum(set(entity_spans(g["text"], g["entities"])) == set(entity_spans(g["text"], hf["preds"][u]))

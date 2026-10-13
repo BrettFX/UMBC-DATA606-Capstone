@@ -12,19 +12,19 @@ def select(only="", profile=""):
 
 
 def test_default_selects_every_model():
-    assert select()[:2] == (0, ["asr", "asr-ct2", "ner"])
+    assert select()[:2] == (0, ["asr", "asr-ct2", "asr-results", "ner"])
 
 
 def test_cpu_profile_skips_the_large_full_precision_model():
-    assert select(profile="cpu")[:2] == (0, ["asr-ct2", "ner"])  # no GPU: the small CTranslate2 model + NER
-    assert select(profile="gpu")[:2] == (0, ["asr", "ner"])
+    assert select(profile="cpu")[:2] == (0, ["asr-ct2", "asr-results", "ner"])  # no GPU: the small CTranslate2 model + results + NER
+    assert select(profile="gpu")[:2] == (0, ["asr", "asr-results", "ner"])
 
 
 def test_only_picks_one_group_and_bad_input_is_rejected():
     assert select(only="asr-ct2")[:2] == (0, ["asr-ct2"])
     assert select(only="asr")[1] == ["asr"]  # exactly the group, not every ASR model
     rc, _, err = select(only="tts")
-    assert rc != 0 and "groups: asr, asr-ct2, ner" in err
+    assert rc != 0 and "groups: asr, asr-ct2, asr-results, ner" in err
     rc, _, err = select(only="ner", profile="cpu")
     assert rc != 0 and "not both" in err
     assert select(profile="tpu")[0] != 0
