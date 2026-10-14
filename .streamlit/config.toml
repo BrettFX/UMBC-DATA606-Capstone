@@ -1,0 +1,24 @@
+# ClearanceIQ theme: matches the splash page (deep navy, radar blue accent)
+[server]
+headless = true
+
+[browser]
+gatherUsageStats = false
+
+[theme]
+base = "dark"
+primaryColor = "#4a9bc9"
+backgroundColor = "#06142a"
+secondaryBackgroundColor = "#0c2342"
+textColor = "#e6f1fb"
+linkColor = "#8fd6ff"
+borderColor = "#1d3a5f"
+baseRadius = "0.6rem"
+font = "sans-serif"
+headingFont = "sans-serif"
+codeFont = "monospace"
+
+[theme.sidebar]
+backgroundColor = "#04101f"
+secondaryBackgroundColor = "#0a1d38"
+borderColor = "#15304f"

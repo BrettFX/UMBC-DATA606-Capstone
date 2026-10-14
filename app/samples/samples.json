@@ -1,0 +1,416 @@
+[
+  {
+    "id": "atcosim-train-000620",
+    "file": "atcosim-train-000620.wav",
+    "source": "atcosim",
+    "duration_s": 4.23,
+    "ground_truth": "p s a eight one zero contact zurich one three three decimal four",
+    "entities": [
+      {
+        "text": "p s a eight one zero",
+        "label": "CALLSIGN",
+        "span": [
+          0,
+          20
+        ]
+      },
+      {
+        "text": "contact",
+        "label": "COMMAND",
+        "span": [
+          21,
+          28
+        ]
+      },
+      {
+        "text": "zurich",
+        "label": "FACILITY",
+        "span": [
+          29,
+          35
+        ]
+      },
+      {
+        "text": "one three three decimal four",
+        "label": "FREQUENCY",
+        "span": [
+          36,
+          64
+        ]
+      }
+    ],
+    "split": "test"
+  },
+  {
+    "id": "atcosim-train-000666",
+    "file": "atcosim-train-000666.wav",
+    "source": "atcosim",
+    "duration_s": 2.79,
+    "ground_truth": "alitalia one one nine rhein identified",
+    "entities": [
+      {
+        "text": "alitalia one one nine",
+        "label": "CALLSIGN",
+        "span": [
+          0,
+          21
+        ]
+      },
+      {
+        "text": "rhein",
+        "label": "FACILITY",
+        "span": [
+          22,
+          27
+        ]
+      },
+      {
+        "text": "identified",
+        "label": "COMMAND",
+        "span": [
+          28,
+          38
+        ]
+      }
+    ],
+    "split": "test"
+  },
+  {
+    "id": "atcosim-train-000725",
+    "file": "atcosim-train-000725.wav",
+    "source": "atcosim",
+    "duration_s": 7.03,
+    "ground_truth": "alitalia four one three rhein identified climb flight level two five zero set course trasadingen",
+    "entities": [
+      {
+        "text": "alitalia four one three",
+        "label": "CALLSIGN",
+        "span": [
+          0,
+          23
+        ]
+      },
+      {
+        "text": "rhein",
+        "label": "FACILITY",
+        "span": [
+          24,
+          29
+        ]
+      },
+      {
+        "text": "identified",
+        "label": "COMMAND",
+        "span": [
+          30,
+          40
+        ]
+      },
+      {
+        "text": "climb",
+        "label": "COMMAND",
+        "span": [
+          41,
+          46
+        ]
+      },
+      {
+        "text": "flight level two five zero",
+        "label": "ALTITUDE",
+        "span": [
+          47,
+          73
+        ]
+      },
+      {
+        "text": "set course",
+        "label": "COMMAND",
+        "span": [
+          74,
+          84
+        ]
+      },
+      {
+        "text": "trasadingen",
+        "label": "WAYPOINT",
+        "span": [
+          85,
+          96
+        ]
+      }
+    ],
+    "split": "test"
+  },
+  {
+    "id": "atcosim-train-002678",
+    "file": "atcosim-train-002678.wav",
+    "source": "atcosim",
+    "duration_s": 3.32,
+    "ground_truth": "lufthansa four three nine zero proceed direct to canne",
+    "entities": [
+      {
+        "text": "lufthansa four three nine zero",
+        "label": "CALLSIGN",
+        "span": [
+          0,
+          30
+        ]
+      },
+      {
+        "text": "proceed direct",
+        "label": "COMMAND",
+        "span": [
+          31,
+          45
+        ]
+      },
+      {
+        "text": "canne",
+        "label": "WAYPOINT",
+        "span": [
+          49,
+          54
+        ]
+      }
+    ],
+    "split": "test"
+  },
+  {
+    "id": "atc-asr-dataset-test-000002",
+    "file": "atc-asr-dataset-test-000002.wav",
+    "source": "atc-asr-dataset",
+    "duration_s": 6.27,
+    "ground_truth": "good morning break shamrock six four five now line up runway three one and cleared for takeoff wind one two zero degrees five knots",
+    "entities": [
+      {
+        "text": "shamrock six four five",
+        "label": "CALLSIGN",
+        "span": [
+          19,
+          41
+        ]
+      },
+      {
+        "text": "line up",
+        "label": "COMMAND",
+        "span": [
+          46,
+          53
+        ]
+      },
+      {
+        "text": "runway three one",
+        "label": "RUNWAY",
+        "span": [
+          54,
+          70
+        ]
+      },
+      {
+        "text": "cleared for takeoff",
+        "label": "COMMAND",
+        "span": [
+          75,
+          94
+        ]
+      }
+    ],
+    "split": "test"
+  },
+  {
+    "id": "atc-asr-dataset-test-000020",
+    "file": "atc-asr-dataset-test-000020.wav",
+    "source": "atc-asr-dataset",
+    "duration_s": 3.47,
+    "ground_truth": "quality niner one romeo descend flight level eight zero",
+    "entities": [
+      {
+        "text": "quality niner one romeo",
+        "label": "CALLSIGN",
+        "span": [
+          0,
+          23
+        ]
+      },
+      {
+        "text": "descend",
+        "label": "COMMAND",
+        "span": [
+          24,
+          31
+        ]
+      },
+      {
+        "text": "flight level eight zero",
+        "label": "ALTITUDE",
+        "span": [
+          32,
+          55
+        ]
+      }
+    ],
+    "split": "test"
+  },
+  {
+    "id": "atc-asr-dataset-test-000036",
+    "file": "atc-asr-dataset-test-000036.wav",
+    "source": "atc-asr-dataset",
+    "duration_s": 5.29,
+    "ground_truth": "speedbird eight five for climb clearance contact praha one three three decimal three niner zero good bye",
+    "entities": [
+      {
+        "text": "speedbird eight five",
+        "label": "CALLSIGN",
+        "span": [
+          0,
+          20
+        ]
+      },
+      {
+        "text": "climb",
+        "label": "COMMAND",
+        "span": [
+          25,
+          30
+        ]
+      },
+      {
+        "text": "contact",
+        "label": "COMMAND",
+        "span": [
+          41,
+          48
+        ]
+      },
+      {
+        "text": "praha",
+        "label": "FACILITY",
+        "span": [
+          49,
+          54
+        ]
+      },
+      {
+        "text": "one three three decimal three niner zero",
+        "label": "FREQUENCY",
+        "span": [
+          55,
+          95
+        ]
+      }
+    ],
+    "split": "test"
+  },
+  {
+    "id": "atc-asr-dataset-test-000092",
+    "file": "atc-asr-dataset-test-000092.wav",
+    "source": "atc-asr-dataset",
+    "duration_s": 3.14,
+    "ground_truth": "good morning lufthansa six one three praha radar contact proceed to rapet",
+    "entities": [
+      {
+        "text": "lufthansa six one three",
+        "label": "CALLSIGN",
+        "span": [
+          13,
+          36
+        ]
+      },
+      {
+        "text": "praha radar",
+        "label": "FACILITY",
+        "span": [
+          37,
+          48
+        ]
+      },
+      {
+        "text": "proceed",
+        "label": "COMMAND",
+        "span": [
+          57,
+          64
+        ]
+      },
+      {
+        "text": "rapet",
+        "label": "WAYPOINT",
+        "span": [
+          68,
+          73
+        ]
+      }
+    ],
+    "split": "test"
+  },
+  {
+    "id": "atcosim-train-007516",
+    "file": "atcosim-train-007516.wav",
+    "source": "atcosim",
+    "duration_s": 3.09,
+    "ground_truth": "u s air one four milan one three four five two bye bye ",
+    "entities": [],
+    "split": "validation",
+    "note": "Validation split"
+  },
+  {
+    "id": "atcosim-train-006471",
+    "file": "atcosim-train-006471.wav",
+    "source": "atcosim",
+    "duration_s": 3.98,
+    "ground_truth": "and alitalia four zero four radar contact right turn ten degrees ",
+    "entities": [],
+    "split": "validation",
+    "note": "Validation split"
+  },
+  {
+    "id": "atcosim-train-006512",
+    "file": "atcosim-train-006512.wav",
+    "source": "atcosim",
+    "duration_s": 5.71,
+    "ground_truth": "good afternoon lufthansa five five zero four descend flight level two five zero on radar heading of two five five ",
+    "entities": [],
+    "split": "validation",
+    "note": "Validation split"
+  },
+  {
+    "id": "atc-asr-dataset-validation-000409",
+    "file": "atc-asr-dataset-validation-000409.wav",
+    "source": "atc-asr-dataset",
+    "duration_s": 2.18,
+    "ground_truth": "KEMAD SHAMROCK SIX SEVEN XRAY",
+    "entities": [],
+    "split": "validation",
+    "note": "Validation split"
+  },
+  {
+    "id": "atc-asr-dataset-validation-000099",
+    "file": "atc-asr-dataset-validation-000099.wav",
+    "source": "atc-asr-dataset",
+    "duration_s": 3.26,
+    "ground_truth": "ONE THREE ONE THREE FIVE ZERO WONDERFUL DAY THANK YOU BYE BYE AUSTRIAN THREE SEVEN EIGHT MIKE",
+    "entities": [],
+    "split": "validation",
+    "note": "Validation split"
+  },
+  {
+    "id": "atc-asr-dataset-validation-000596",
+    "file": "atc-asr-dataset-validation-000596.wav",
+    "source": "atc-asr-dataset",
+    "duration_s": 5.73,
+    "ground_truth": "APPROACH NOVEMBER TWO SIX NINER SIX SIERRA THROUGH THIRTEEN THOUSAND EIGHT HUNDRED DESCENDING ONE ONE ELEVEN THOUSAND",
+    "entities": [],
+    "split": "validation",
+    "note": "Validation split"
+  },
+  {
+    "id": "atcosim-train-004568",
+    "file": "atcosim-train-004568.wav",
+    "source": "atcosim",
+    "duration_s": 38.88,
+    "ground_truth": " ah   ah have a nice evening  thank you bye bye ciao yes to the irish pub   you know it ohh you have to ask   i have no idea where it is im just walking behind the others ah no ah but you come in front and you ask   and he will tell you but i really dont know i dont even know the address okay  its in paris definitely  okay bye   ",
+    "entities": [],
+    "split": "train",
+    "note": "Longest clip in the dataset (train split); exercises splitting at pauses"
+  }
+]

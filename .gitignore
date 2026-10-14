@@ -49,6 +49,8 @@ huggingface/
 # Deliberate, scoped exception: a handful of short illustrative clips saved by
 # the proposal EDA notebook so they play natively on GitHub (see res/README.md).
 !res/audio_samples/*.wav
+# Bundled demo clips for the ClearanceIQ app (built by scripts/build_app_samples.py, ~3 MB)
+!app/samples/*.wav
 
 # --- OS / editor cruft ---
 .DS_Store
@@ -59,3 +61,7 @@ models/
 
 # --- Run logs (training / annotation runs write here) ---
 res/logs/
+
+# --- ClearanceIQ e2e test scratch screenshots (regenerated on every run; curated ones live in app/docs/screenshots/) ---
+app/tests/e2e/shots/
+.pytest_cache/
