@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Creates (or updates) the conda environment defined in environment.yml and
-# registers it as a Jupyter kernel.
+# registers it as a Jupyter kernel. Also installs system packages the app needs (espeak-ng).
 #
 # Usage:
 #   ./setup.sh
@@ -16,6 +16,28 @@ if ! command -v conda >/dev/null 2>&1; then
     echo "conda not found on PATH. Install Anaconda/Miniconda first." >&2
     exit 1
 fi
+
+# System packages. Kokoro (voice read-back in the app) needs espeak-ng for phonemization fallback.
+# Installed via apt when missing; on other platforms we only warn, since the app works without it.
+ensure_system_deps() {
+    if command -v espeak-ng >/dev/null 2>&1; then
+        echo "espeak-ng found."
+        return
+    fi
+    if command -v apt-get >/dev/null 2>&1; then
+        echo "espeak-ng not found; installing via apt (may prompt for sudo)..."
+        local sudo=""
+        [ "$(id -u)" -ne 0 ] && sudo="sudo"
+        if $sudo apt-get install -y espeak-ng; then
+            return
+        fi
+        echo "WARNING: could not install espeak-ng; the app's voice read-back may not work." >&2
+    else
+        echo "WARNING: espeak-ng not found and apt-get is unavailable. Install it with your package manager" \
+             "(e.g. 'brew install espeak-ng') for the app's voice read-back." >&2
+    fi
+}
+ensure_system_deps
 
 # `conda env create` fails (or prompts to overwrite) when the env already exists,
 # so update in place instead; --prune drops packages no longer in the file.

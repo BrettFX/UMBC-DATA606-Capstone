@@ -75,7 +75,8 @@ def main() -> None:
     missing = models.missing_assets()
     if missing:
         st.error("**Setup required.** These model files were not found:\n\n" + "\n".join(f"- `{m}`" for m in missing)
-                 + "\n\nRun `./download-models.sh --profile cpu` from the repository root, then reload this page.")
+                 + "\n\nRun `./download-models.sh --profile cpu` from the repository root (it falls back to a public Google Drive bundle "
+                 "when you have no AWS access), then reload this page.")
         st.stop()
 
     data, filename, sample = sidebar.input_panel()

@@ -20,10 +20,13 @@ Not certified or validated for operational use.
 - Optional plain-English explanation from Claude. It stays disabled until you enter an Anthropic API key and press **Test key**;
   only transcript text and entity tags are sent, and the key is kept in the browser session only
 
+- Experimental voice read-back of the transcript with [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M) text-to-speech, a post-process
+  after recognition. Installed by `./setup.sh` (`kokoro` from `requirements.txt` plus `espeak-ng` via apt); the panel is hidden if `kokoro` is missing
+
 ## Run
 
 ```bash
-./download-models.sh --profile cpu    # one-time: ASR + NER models from S3
+./download-models.sh --profile cpu    # one-time: ASR + NER models (S3, or a Google Drive bundle if you have no AWS access)
 ./run-app.sh                          # opens http://localhost:8501
 ```
 

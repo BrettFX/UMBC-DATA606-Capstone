@@ -68,6 +68,15 @@ credentials (environment or `~/.aws`) and are safe to re-run.
 ./upload-models.sh --dry-run       # show the plan only; a model that already matches latest is skipped
 ```
 
+**No S3 access? Run the app from a Google Drive bundle.** `./download-models.sh` (default `--source auto`) falls back to a
+single zip, `clearanceiq-models.zip` (~0.7 GB: the CTranslate2 ASR model and both spaCy NER models, everything the Streamlit
+app loads), in a public view-only [Drive folder](https://drive.google.com/drive/folders/1F4tGwPjIgFPdo3ZClRX5-y3gFGThBWZ1)
+when no AWS credentials are found; force it with `--source gdrive`. The zip is checked against `app-models.sha256`
+(committed here) before extraction, and you can also download it by hand and run
+`python scripts/app_bundle.py fetch --zip <file>`. The bundle does not include what the notebooks and training need
+(full-precision model, results CSVs, NER data). Maintainers rebuild it with `./package-app-models.sh`,
+upload `dist/clearanceiq-models.zip` to the Drive folder (replacing the old one) and commit the updated `app-models.sha256`.
+
 The ASR model is published twice: the merged full-precision model (`asr/lora-whisper-medium-en`) and its
 CTranslate2 int8 conversion (`asr/lora-whisper-medium-en-ct2-int8`), which is what a CPU device runs
 (`asr.inference.best_transcriber()` picks the right one; see `res/benchmarks/EXPERIMENTS.md` for why).

@@ -31,6 +31,10 @@ NER_BLURBS = {
     "spaCy CNN · Rare-label balanced": "Same model, trained with rare labels (headings, runways, squawks…) repeated up to 4×. Best on the 95-utterance hand-labeled gold set.",
 }
 
+TTS_SAMPLE_RATE = 24_000         # Kokoro-82M output rate
+TTS_VOICES = {"Heart (female, US)": "af_heart", "Michael (male, US)": "am_michael", "Emma (female, UK)": "bf_emma"}
+DEFAULT_TTS_VOICE = "af_heart"
+
 LLM_MODELS = {"Claude Haiku 5.5 (fast)": "claude-haiku-5-5", "Claude Sonnet 5.5 (balanced)": "claude-sonnet-5-5"}
 DEFAULT_LLM = "Claude Haiku 5.5 (fast)"
 

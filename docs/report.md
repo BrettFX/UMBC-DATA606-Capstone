@@ -26,7 +26,9 @@ The project will follow a general communication-intelligence pipeline:
 
 > **ATC Audio → Speech Recognition → Aviation Information Extraction → Communication Analysis**
 
-A prototype application (likely using `Streamlit`) is planned for development to be used to demonstrate the trained models and analytical results. The goal is to implement a real-world use case that Air Traffic Controllers and Pilots can use to enhance daily operations and promote aviation safety.
+A prototype application, **ClearanceIQ** (built with `Streamlit`; Section 5.12), demonstrates the trained models and analytical results. The goal is to implement a real-world use case that Air Traffic Controllers and Pilots can use to enhance daily operations and promote aviation safety. The application extends the pipeline with two optional post-processing steps after recognition: a plain-English explanation of the transmission (Claude) and an experimental synthesized-voice read-back of the transcript (Kokoro text-to-speech):
+
+> **ATC Audio → Speech Recognition → Aviation Information Extraction → (optional) Plain-English Explanation / Voice Read-back**
 
 ---
 
@@ -435,7 +437,7 @@ Every analysis in this section converges on the same underlying signal, approach
 
 # 5. Machine Learning
 
-This section covers the project's modeling work in two layers. Sections 5.1-5.7 describe the ASR prototype (Research Question 1, Section 2.3) built on a 100-utterance evaluation subset and a 1,000-row fine-tune of `whisper-small.en`. Sections 5.8-5.11 report the production results of the standalone pipelines: full-dataset ASR training scored on all 1,909 test utterances (5.8, including entity-level accuracy and Research Question 3), LLM-assisted aviation information extraction and student NER models (5.9-5.10, Research Question 2), and CPU inference benchmarks (5.11). Section 5.12 summarizes results, limitations and next steps. The full analysis is in [notebooks/machine_learning.ipynb](../notebooks/machine_learning.ipynb), which executes cleanly end to end (Sections A-E prototype; F-H load saved production results); where the two layers disagree, the production results supersede the prototype figures.
+This section covers the project's modeling work in two layers. Sections 5.1-5.7 describe the ASR prototype (Research Question 1, Section 2.3) built on a 100-utterance evaluation subset and a 1,000-row fine-tune of `whisper-small.en`. Sections 5.8-5.11 report the production results of the standalone pipelines: full-dataset ASR training scored on all 1,909 test utterances (5.8, including entity-level accuracy and Research Question 3), LLM-assisted aviation information extraction and student NER models (5.9-5.10, Research Question 2), and CPU inference benchmarks (5.11). Section 5.12 describes the ClearanceIQ Streamlit application that integrates these models, and Section 5.13 summarizes results, limitations and next steps. The full analysis is in [notebooks/machine_learning.ipynb](../notebooks/machine_learning.ipynb), which executes cleanly end to end (Sections A-E prototype; F-H load saved production results); where the two layers disagree, the production results supersede the prototype figures.
 
 ## 5.1 Modeling Infrastructure
 
@@ -770,7 +772,56 @@ Ten seconds is the floor without retraining; shorter windows collapse into hallu
 
 **Caveats.** One high-end laptop CPU was measured and thread-count rows are approximate on a hybrid CPU; model load takes 5-6 s, so the application must keep the model in memory; transcripts longer than 30 s need chunking.
 
-## 5.12 Summary, Limitations, and Next Steps
+## 5.12 ClearanceIQ: Streamlit Application
+
+The trained models are integrated into **ClearanceIQ** (`app/`, run with `./run-app.sh`), an academic research prototype that turns an ATC radio clip into a transcript, a structured clearance and an optional plain-English explanation. It is a front end over the artifacts from 5.8-5.11 (the CTranslate2 int8 medium.en + LoRA ASR model and the spaCy NER models) and runs entirely on a CPU. It is not certified or validated for operational use, and says so on every screen.
+
+### Processing Pipeline
+
+> **Audio in → audio preparation → ASR → entity extraction → word alignment → (optional) explanation / voice read-back**
+
+1. **Input.** Bundled labeled samples (test and validation clips, plus the longest clip in the dataset to demonstrate splitting), file upload (wav, mp3, flac, ogg, m4a; up to 50 MB and 5 minutes), or microphone recording.
+2. **Audio preparation** (`app/services/audio_prep.py`). Decoding and validation (clear errors for silent, too-short or unreadable audio), conversion to mono 16 kHz, trimming of leading and trailing silence, and splitting at pauses into segments of at most 28 s, since Whisper's window is 30 s (5.11 notes that longer transcripts need chunking). The applied steps and an estimated SNR are shown to the user.
+3. **ASR** (`app/services/models.py`, `src/asr/inference.py`). `best_transcriber()` selects the CPU configuration chosen in 5.11 (CTranslate2 int8, dynamic encoder windows, 4 threads). Models are cached for the life of the server so the 5-6 s load is paid once.
+4. **Entity extraction.** The user chooses between the two student spaCy models from 5.10 (standard, or rare-label balanced); the nine labels from 5.9 are tagged in about a millisecond per segment. The BERT students from 5.10 are deliberately not offered: they scored the same as spaCy on human labels (0.874 against 0.871 held-out F1, within noise), but need a GPU for comparable speed (about 2,200 against about 3,700 utterances per second) and are far larger on disk than spaCy's roughly 4 MB, which would add download size and CPU latency with no accuracy benefit.
+5. **Word alignment** (`app/services/align.py`). Word-level timings are derived for the live transcript (below).
+
+### Interface
+
+- **Live transcript.** Under the audio player, the word being spoken is highlighted during playback and clicking a word seeks the player to it. The playhead is synchronized across the waveform and the Mel spectrogram.
+- **Transcript & entities tab.** A clearance card grouping entities by type, the displaCy entity-highlighted transcript, a color legend, a copyable plain transcript, and timing metrics (transcription time, entity time).
+- **Evidence tab.** On labeled samples, WER, CER, entity precision/recall/F1 and a word-level diff against the ground truth, with a note when a clip comes from the training or validation split (so its score is a demo rather than an evaluation).
+- **Models tab.** Hugging Face-style model cards for the ASR model and both NER variants (data, scores from 5.8 and 5.10, limitations), and a side-by-side NER comparison.
+- **Audio analysis tab.** Waveform, Mel spectrogram, duration, speech rate and the estimated SNR, using the same acoustic features as the EDA (Section 4).
+- **Explain (AI) tab.** An optional plain-English explanation from Claude (Haiku or Sonnet 5.5). It is disabled until the user supplies an Anthropic API key and presses **Test key**; only the transcript text and entity tags are sent (never audio), and the key lives in the browser session only. The prompt restricts the model to the transcript and tags, asks it to flag corrections, repeats and likely recognition errors, and forbids operational advice. The response is schema-constrained.
+- **Design.** A radar-themed splash page, a dark theme and a sticky header with a persistent research-prototype disclaimer.
+
+### Voice Read-back with Kokoro TTS (Experimental)
+
+As an experiment, the application can speak the recognized transcript back using **Kokoro-82M** (Hexgrad), an open-weight (Apache-2.0), 82M-parameter text-to-speech model that outputs 24 kHz audio and is small enough to run on a CPU. This is a pure post-process after ASR (`app/services/speech.py`): it takes the final transcript text and synthesizes it; it does not touch the original audio and does not feed back into recognition or entity extraction.
+
+- **Purpose.** Radio audio is narrowband, noisy and fast (Section 4.2), so hearing the model's interpretation in a clean, evenly paced voice gives a quick check of what the system understood, and offers a way to re-present a transmission with less noise and more consistent pacing. Hearing a transcript error spoken aloud is also a useful, informal way to notice a wrong digit or callsign.
+- **Interface.** A "Voice read-back (experimental)" panel in the Transcript & entities tab with a voice choice (three Kokoro voices) and a speed slider (0.7-1.3x). Audio is generated on request and cached per (transcript, voice, speed), so reruns are free.
+- **Dependencies.** Kokoro (`kokoro==0.9.4` in `requirements.txt`, Python below 3.13) needs the system package `espeak-ng`, which `setup.sh` installs via apt when missing. The application does not require either: if Kokoro is not installed the panel is hidden, and a synthesis failure produces an error message rather than breaking the analysis.
+- **Verification so far.** The synthesis service is unit-tested against a stand-in pipeline (text cleanup, chunk concatenation, WAV format, empty-transcript error). It has **not** yet been evaluated with the real Kokoro weights, so latency, memory and voice quality on this project's CPU target are unmeasured, and no listening study has been done.
+- **Limitations to evaluate.** The corpora spell numbers as digit words in lowercase ("six zero zero zero"), so output should be spoken correctly, but ATC-specific pronunciations ("niner", "tree", "fife", airline names, fix names such as "praha") are not guaranteed to be pronounced as a controller would say them. The voice is a re-synthesis of the *transcript*, so it will faithfully repeat any ASR error, and a fluent voice can make a wrong transcript sound more trustworthy than it is. For that reason it is labeled experimental and carries the same research-prototype disclaimer. It is not a substitute for listening to the original audio.
+
+### Distribution and Setup
+
+A fresh clone needs the model files (git-ignored), not the datasets: the labeled sample clips and their ground truth are committed in `app/samples/`. `./setup.sh` creates the conda environment (and installs `espeak-ng` for the voice read-back), and `./download-models.sh --profile cpu` fetches the models from the project's S3 bucket. Because that bucket is private, a fallback is provided: `clearanceiq-models.zip` (about 0.7 GB, containing only what the app loads: the CTranslate2 ASR model, both spaCy NER models and the small metrics files behind the model cards) is hosted in a public, view-only Google Drive folder, and the download script uses it automatically when no AWS credentials are found. Because a public download location could be altered, the zip's sha256 is committed to the repository (`app-models.sha256`) and verified before extraction, and extraction refuses any path outside `models/`. The bundle is built with `scripts/app_bundle.py package`. It does not include what the notebooks and training need (full-precision model, results CSVs, NER training data), which remain S3-only.
+
+### Testing
+
+`app/tests/` holds unit tests (audio preparation, alignment, metrics, explanations, speech synthesis), headless Streamlit `AppTest` UI tests (including recovery from stale session state after a code reload) and Playwright browser tests. Sample clips and README screenshots are rebuilt by `scripts/build_app_samples.py` and `scripts/capture_app_screenshots.py`.
+
+### Application Limitations
+
+- Single-user local prototype; there is no live radio stream. Input is a recorded clip, so the "live against recorded input" design question is answered as recorded-only for now.
+- Scores shown on one sample clip are anecdotal; the test-set results in 5.8 and 5.10 are the research measurements.
+- The explanation feature depends on an external API and on a user-supplied key, and is itself an LLM's reading of an automatic transcript, so it can repeat or add to recognition errors despite the prompt constraints.
+- The application does not confirm clearances, detect conflicts or raise safety alerts.
+
+## 5.13 Summary, Limitations, and Next Steps
 
 **Research Question 1 (ASR).** The prototype (5.3-5.7) compared a generic baseline, a domain-adapted comparison model and a fine-tuned `whisper-small.en` model on 100 utterances. The full-dataset experiments (5.8) trained on all 13,956 training rows and were scored on all 1,909 test utterances. The selected **whisper-medium.en + LoRA** model reaches **3.8% WER overall, 7.5% on real audio and 1.2% on simulated audio**, against 35.7% for the zero-shot model, and is significantly better on real audio than the off-the-shelf ATC model (9.1%; paired difference -1.5 points, 95% CI -2.4 to -0.6). It preserves 93.5% of aviation entities; callsigns are its weakest entity (recall 0.886).
 
@@ -778,7 +829,7 @@ Ten seconds is the floor without retraining; shorter windows collapse into hallu
 
 **Research Question 3 (characteristics and performance).** On the full test split, short transmissions are hardest (real-audio WER 14.6% under 2 s against about 6% beyond 3 s), entity-rich transmissions are easier, and per-utterance correlations are weak (|rho| at most 0.17) (5.8).
 
-**Deployment.** On a CPU the ASR model runs at about 0.7 s per utterance (RTF about 0.2, 2.2 GB) through CTranslate2 int8 with dynamic encoder windows, with accuracy indistinguishable from the GPU model (5.11).
+**Deployment.** On a CPU the ASR model runs at about 0.7 s per utterance (RTF about 0.2, 2.2 GB) through CTranslate2 int8 with dynamic encoder windows, with accuracy indistinguishable from the GPU model (5.11). These models are integrated in the ClearanceIQ Streamlit application (5.12), which adds live word-synchronized transcripts, a clearance card, evidence against ground truth, optional Claude explanations and an experimental Kokoro text-to-speech read-back.
 
 **Known limitations, disclosed rather than hidden:**
 
@@ -788,10 +839,11 @@ Ten seconds is the floor without retraining; shorter windows collapse into hallu
 - Students inherit the teacher's label noise, and 4,865 flagged utterances are unreviewed and excluded from training.
 - The scoring normalizer does not reconcile "nine" with "niner" or decompose alphanumeric callsigns, and the "request" verb is not yet decided as a COMMAND.
 - Latency was measured on one high-end laptop CPU.
+- The ClearanceIQ application has been exercised through automated tests and the bundled samples, but has not been user-tested with controllers or pilots. The Kokoro voice read-back (5.12) has been tested only with a stand-in synthesizer, so its latency, pronunciation of ATC phraseology and usefulness are unmeasured.
 
 **Next steps**, in order:
 
-1. **Streamlit prototype application (ClearanceIQ)**, integrating the ASR and NER models (5.11) into the ATC audio analysis tool described in Section 2.1. Open design decisions: live against recorded input, voice-activity splitting of long recordings, entity colors and clearance-card layout, and raw against cleaned transcript display.
+1. **Evaluate and refine ClearanceIQ (5.12).** The application is built; remaining work is measurement and the open design questions: voice-activity splitting of long recordings, raw against cleaned transcript display, and feedback from aviation users. For the Kokoro read-back: install and benchmark it on the CPU target (latency, RTF, memory), listen to ATC phraseology (digits, "niner/tree/fife", callsigns, fix names), add a pronunciation map if needed, and decide whether to keep it.
 2. **Train the LoRA model for about 8 epochs (hypothesis, not yet tested).** The LoRA model's validation WER was still falling at epoch 3 (8.5%, 5.7%, 4.3%), unlike the small model, which plateaued by epochs 4-6 (validation loss rose after epoch 3). The small model's extra epochs gave only a marginal gain, the LoRA learning rate (5e-4) was a single untuned choice, and the run would cost about 10 GPU-hours (239 minutes for 3 epochs). A learning-rate comparison and a higher rank are natural companions.
 3. **Human review of the 4,865 flagged NER utterances**, rare labels first, then retrain the students on the larger human-verified set.
 4. **Fine-tune with 6-8 s encoder windows** so the floor drops below 10 s (the encoder would shrink a further 30-40%), and benchmark on the real target devices, including 2-thread configurations.
