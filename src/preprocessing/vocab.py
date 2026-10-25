@@ -2,7 +2,7 @@
 `text_features.py`. Kept as pure data (no logic) so they're easy to review
 or extend independently.
 
-These are all *proxies* standing in for the deferred, ground-truth NER work
+These are all *proxies* standing in for ground-truth NER (see `src/ner`).
 This is non-exhaustive by design.
 """
 
@@ -37,7 +37,7 @@ KNOWN_CALLSIGN_WORDS = frozenset(
 )
 
 # A minimal, fixed proxy for ATC command verbs
-# NOTE: This is explicitly a placeholder for the deferred NER work and not meant to be expanded further here.
+# NOTE: Explicitly a proxy; real extraction lives in `src/ner` and this list is not meant to be expanded.
 ATC_COMMAND_VERBS = frozenset(
     {
         "climb", "descend", "maintain", "contact", "cleared", "turn",

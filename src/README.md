@@ -15,8 +15,8 @@ Reusable project code, importable from notebooks via `sys.path.append("../src")`
   dynamic-range proxy, zero-crossing rate, spectral centroid/bandwidth. Pure numpy/librosa, no
   `datasets` dependency.
 - **`text_features.py`** / **`vocab.py`**: `normalize_transcript`, plus lightweight proxy
-  counts (numeric tokens, ATC command verbs, callsign-like sequences) standing in for the
-  deferred, ground-truth NER work.
+  counts (numeric tokens, ATC command verbs, callsign-like sequences) standing in for
+  ground-truth NER (see `src/ner`).
 - **`quality.py`**: `run_quality_checks(df)`: missing audio/transcript, zero-duration, corrupt
   audio, and duplicate-row checks (all dropped), plus repeated-transcript detection (flagged,
   never dropped; see the module docstring for why duplicate *audio* and repeated *phrasing*

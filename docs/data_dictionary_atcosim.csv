@@ -15,8 +15,8 @@ word_count,Int,Whitespace-delimited token count of `transcript`.,13
 character_count,Int,Character count of `transcript`.,65
 speech_rate_wpm,Float,word_count / (duration_sec / 60); NaN if duration_sec is non-positive.,184.4053
 numeric_token_count,Int,Count of ATC numeral-word tokens in `transcript_normalized` (see preprocessing.vocab).,8
-command_verb_count,Int,Count of ATC command-verb tokens in `transcript_normalized`; a proxy pending real NER (deferred).,1
-callsign_like_count,Int,Count of callsign-like token runs in `transcript_normalized`; a proxy pending real NER (deferred).,0
+command_verb_count,Int,Count of ATC command-verb tokens in `transcript_normalized`; a vocabulary proxy (real entity labels come from the NER pipeline in src/ner).,1
+callsign_like_count,Int,Count of callsign-like token runs in `transcript_normalized`; a vocabulary proxy (real entity labels come from the NER pipeline in src/ner).,0
 rms_energy,Float,"Mean per-frame RMS amplitude (unitless, waveform in [-1, 1]); loudness proxy.",0.0508
 silence_pct,Float,Percent of the clip librosa.effects.split(top_db=30) marks as below-threshold.,25.8596
 snr_db_proxy,Float,"P95-P10 gap of per-frame RMS-in-dB; a heuristic dynamic-range proxy, NOT a physical SNR measurement -- comparative use only.",39.0185

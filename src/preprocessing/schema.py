@@ -60,11 +60,11 @@ FINAL_UTTERANCE_COLUMNS = {
     ),
     "command_verb_count": (
         "Count of ATC command-verb tokens in `transcript_normalized`; a "
-        "proxy pending real NER (deferred)."
+        "vocabulary proxy (real entity labels come from the NER pipeline in src/ner)."
     ),
     "callsign_like_count": (
         "Count of callsign-like token runs in `transcript_normalized`; a "
-        "proxy pending real NER (deferred)."
+        "vocabulary proxy (real entity labels come from the NER pipeline in src/ner)."
     ),
     "rms_energy": (
         "Mean per-frame RMS amplitude (unitless, waveform in [-1, 1]); "

@@ -7,7 +7,7 @@
 | **Author** | Brett Allen |
 | **GitHub Repository** | https://github.com/BrettFX/UMBC-DATA606-Capstone |
 | **LinkedIn** | https://linkedin.com/in/brett-allen-586ba4121 |
-| **PowerPoint Presentation** | [Allen_DATA_606_Capstone_Proposal.pptx](./Allen_DATA_606_Capstone_Proposal.pptx) |
+| **PowerPoint Presentations** | [Final Presentation](./Allen_DATA_606_Capstone_Final.pptx) · [Progress Update](./Allen_DATA_606_Capstone_Progress_Update.pptx) · [Proposal](./Allen_DATA_606_Capstone_Proposal.pptx) |
 | **YouTube Channel** | https://www.youtube.com/@brettallen2199 |
 
 ---
@@ -22,11 +22,11 @@ Unlike ordinary conversational speech, ATC communications use specialized aviati
 
 This project investigates the application of modern Automatic Speech Recognition (ASR) and Natural Language Processing (NLP) techniques to ATC radio communications. The primary goal is to determine how effectively ATC audio can be converted into accurate text and then transformed into structured aviation information.
 
-The project will follow a general communication-intelligence pipeline:
+The project follows a general communication-intelligence pipeline:
 
 > **ATC Audio → Speech Recognition → Aviation Information Extraction → Communication Analysis**
 
-A prototype application, **ClearanceIQ** (built with `Streamlit`; Section 5.12), demonstrates the trained models and analytical results. The goal is to implement a real-world use case that Air Traffic Controllers and Pilots can use to enhance daily operations and promote aviation safety. The application extends the pipeline with two optional post-processing steps after recognition: a plain-English explanation of the transmission (Claude) and an experimental synthesized-voice read-back of the transcript (Kokoro text-to-speech):
+A prototype application, **ClearanceIQ** (built with `Streamlit`; Section 6), demonstrates the trained models and analytical results. The goal is to implement a real-world use case that Air Traffic Controllers and Pilots can use to enhance daily operations and promote aviation safety. The application extends the pipeline with two optional post-processing steps after recognition: a plain-English explanation of the transmission (Claude) and an experimental synthesized-voice read-back of the transcript (Kokoro text-to-speech):
 
 > **ATC Audio → Speech Recognition → Aviation Information Extraction → (optional) Plain-English Explanation / Voice Read-back**
 
@@ -56,19 +56,17 @@ NLP techniques may provide an additional layer of analysis by identifying struct
 
 ## 2.3 Research Questions
 
-This project will investigate the following research questions.
+This project investigates the following research questions; Section 7.1 answers each one explicitly.
 
 ### Research Question 1: Automatic Speech Recognition (ASR)
 
 **How accurately can general-purpose and aviation-domain-adapted (pre-trained and/or fine-tuned) speech recognition models transcribe air traffic control communications?**
 
-Potential evaluation measures include:
+Evaluation measures:
 
 - Word Error Rate (WER)
-- Character Error Rate
-- Callsign recognition accuracy
-- Numeric-value recognition accuracy
-- Command recognition accuracy
+- Character Error Rate (CER; prototype only, Sections 5.3-5.4)
+- Callsign, numeric-value and command recognition (vocabulary-proxy recall in the prototype, Section 5.6; entity-level recall on the full test split, Section 5.8)
 
 ---
 
@@ -78,18 +76,21 @@ Potential evaluation measures include:
 
 > **NOTE:** The datasets do not provide token-level entity labels (callsign spans, command spans, etc.). Instead of training on existing labels, this project used an LLM to curate a labeled dataset, built small human-verified evaluation sets (gold, silver and a frozen held-out set), and trained a `spaCy` NER model on the curated labels (implemented in Sections 5.9 and 5.10; held-out span F1 0.861-0.878 depending on model). The nine implemented categories are callsign, command, facility, altitude, heading, frequency, waypoint, runway and squawk code.
 
-Potential information categories include:
+Information categories (the nine implemented labels):
 
 - Callsigns
 - Commands
+- Facilities
 - Altitudes
 - Headings
-- Speeds
-- Runways
 - Radio frequencies
-- Other operational values
+- Waypoints
+- Runways
+- Squawk codes
 
-Potential evaluation measures include:
+Speed restrictions, listed in the proposal, were not implemented as a separate label (Section 7.3).
+
+Evaluation measures:
 
 - Precision
 - Recall
@@ -112,14 +113,15 @@ Not every transmission is equally difficult to transcribe, and this question is 
 - Recording origin (`dataset_source`): whether the audio was collected from live operational communications or a controlled/simulated environment, since collection method turned out to correlate strongly with acoustic bandwidth, vocabulary variety, and phraseology structure (see Section 4)
 - Acoustic proxies: RMS energy, silence percentage, an SNR dynamic-range proxy (heuristic; see the caveat in Section 4), zero-crossing rate, spectral centroid, and spectral bandwidth
 
-**Planned characteristics**: true aviation-entity counts from real named-entity extraction.
+**Entity-based characteristic** (Section 5.8): the number of aviation entities per transmission, from the LLM-assisted NER annotations (Section 5.9).
 
-Potential relationships to investigate include:
+Relationships investigated (Sections 5.7 and 5.8):
 
 - Word Error Rate (WER) vs. transmission duration
 - WER vs. speech rate
 - WER vs. recording origin (real vs. simulated)
-- WER vs. the SNR dynamic-range proxy; aviation-entity error rate vs. audio quality (still pending real entity labels for the second half)
+- WER vs. the SNR dynamic-range proxy
+- WER vs. aviation-entity count
 
 ---
 
@@ -127,12 +129,12 @@ Potential relationships to investigate include:
 
 Two aviation speech datasets were acquired, joined, and inspected for this research. The full data-ingestion pipeline (`src/preprocessing/`), data-quality checks, and exploratory analysis are documented in [notebooks/comprehensive_eda.ipynb](../notebooks/comprehensive_eda.ipynb).
 
-1. **ATC-ASR-Dataset** (real ATC communications)
+1. **ATC-ASR-Dataset** (real ATC communications; built from the UWB ATC Corpus and the ATCO2 project's test subset, University of West Bohemia, n.d.; ATCO2 Project, n.d.)
 2. **ATCOSIM** (simulated ATC communications)
 
 After combining the two datasets and running data-quality checks, they provide **17,681 utterances** (13,956 train / 1,816 validation / 1,909 test) across roughly **17.9 hours** of ATC audio. `DataIngestPipeline` (`src/preprocessing/ingest.py`) joins them, resamples all audio to a common 16kHz sample rate, derives utterance-level acoustic and text features, and runs auditable data-quality checks; see Section 4 for the full cleaning/feature-engineering methodology and findings.
 
-> **NOTE:** The proposal-stage EDA ([notebooks/proposal_eda.ipynb](../notebooks/proposal_eda.ipynb)) used **ATCO2-ASR** ([`jlvdoorn/atco2-asr`](https://huggingface.co/datasets/jlvdoorn/atco2-asr), 559 utterances) as the real-ATC-audio source. During the comprehensive EDA phase, a larger real-ATC alternative was found (**ATC-ASR-Dataset**), but its dataset card revealed it's built in part from "the ATCO2 1-Hour Test Subset," the same public release `jlvdoorn/atco2-asr` wraps. Running both would have duplicated/overlapped recordings across two "sources" that are really the same underlying audio and could have leaked the same utterance into both a training split (via `atco2-asr`) and a test split (via `atc-asr-dataset`). Therefore, ATCO2-ASR was replaced by ATC-ASR-Dataset rather than run alongside it. The same real ATC audio role is present in the project with ~9x more data (8,122 vs. 559 utterances) and it comes with its own train/validation/test split (ATCO2-ASR only had train/validation). ATCO2-ASR's schema and structure remain documented in [data_dictionary_atco2-asr.csv](data_dictionary_atco2-asr.csv) as a historical record of this decision.
+> **NOTE:** The proposal-stage EDA ([notebooks/proposal_eda.ipynb](../notebooks/proposal_eda.ipynb)) used **ATCO2-ASR** ([`jlvdoorn/atco2-asr`](https://huggingface.co/datasets/jlvdoorn/atco2-asr); jlvdoorn, n.d.-a; 559 utterances) as the real-ATC-audio source. During the comprehensive EDA phase, a larger real-ATC alternative was found (**ATC-ASR-Dataset**), but its dataset card revealed it's built in part from "the ATCO2 1-Hour Test Subset," the same public release `jlvdoorn/atco2-asr` wraps. Running both would have duplicated/overlapped recordings across two "sources" that are really the same underlying audio and could have leaked the same utterance into both a training split (via `atco2-asr`) and a test split (via `atc-asr-dataset`). Therefore, ATCO2-ASR was replaced by ATC-ASR-Dataset rather than run alongside it. The same real ATC audio role is present in the project with ~9x more data (8,122 vs. 559 utterances) and it comes with its own train/validation/test split (ATCO2-ASR only had train/validation). ATCO2-ASR's schema and structure remain documented in [data_dictionary_atco2-asr.csv](data_dictionary_atco2-asr.csv) as a historical record of this decision.
 >
 
 ---
@@ -143,7 +145,7 @@ After combining the two datasets and running data-quality checks, they provide *
 
 **ATC ASR Dataset**
 
-Source: https://huggingface.co/datasets/jacktol/ATC-ASR-Dataset
+Source: https://huggingface.co/datasets/jacktol/ATC-ASR-Dataset (jacktol, n.d.-a)
 
 Per the dataset card on HuggingFace, it is "a high-quality, fine-tuning-ready speech recognition dataset constructed from two real-world Air Traffic Control (ATC) corpora: the UWB ATC Corpus and the ATCO2 1-Hour Test Subset." Transcripts are cleanly segmented at the utterance level and normalized by the publisher (e.g., uppercased, digits spelled out as words, letters expanded to the ITU phonetic alphabet).
 
@@ -198,13 +200,13 @@ https://huggingface.co/datasets/Jzuluaga/atcosim_corpus
 
 ATCOSIM is an aviation speech corpus containing simulated ATC communications produced by professional air traffic controllers.
 
-The corpus contains speech recordings and corresponding transcripts and provides a much larger source of aviation-domain audio which is useful for:
+The corpus (Hofbauer et al., 2008) contains speech recordings and corresponding transcripts and provides a much larger source of aviation-domain audio which is useful for:
 
 - ASR model training or fine-tuning
 - ASR model evaluation on clean, uniformly-phrased speech
 - Cross-dataset model comparison against real ATC-ASR-Dataset audio
 
-This dataset is accessed via the Hugging Face mirror [`jlvdoorn/atcosim`](https://huggingface.co/datasets/jlvdoorn/atcosim). ATCOSIM serves as the primary training-volume dataset for this project (54.1% of combined utterances, 58.5% of combined audio hours). However, the real-audio ATC-ASR-Dataset remains the evaluation target.
+This dataset is accessed via the Hugging Face mirror [`jlvdoorn/atcosim`](https://huggingface.co/datasets/jlvdoorn/atcosim) (jlvdoorn, n.d.-b). ATCOSIM serves as the primary training-volume dataset for this project (54.1% of combined utterances, 58.5% of combined audio hours). However, the real-audio ATC-ASR-Dataset remains the evaluation target.
 
 ---
 
@@ -246,63 +248,57 @@ Because the project contains more than one machine-learning task, there may not 
 
 ### Automatic Speech Recognition
 
-For the ASR task, the primary target will be:
+For the ASR task, the primary target is:
 
 **`transcript`**
 
-The model will receive an audio signal as input and attempt to predict the corresponding transcript.
+The model receives an audio signal as input and predicts the corresponding transcript.
 
 ---
 
 ### Aviation Information Extraction
 
-As stated in previous sections, neither dataset provides ready-made entity annotations. Thus, the target labels will be derived rather than taken directly from the source data. For instance, an initial rule-based/pattern pass over transcripts, refined against a small manually annotated evaluation subset (e.g., via LLM or an additional data source found elsewhere).
+Neither dataset provides ready-made entity annotations, so the target labels were derived rather than taken from the source data. The comprehensive EDA first built lightweight vocabulary/regex proxies (`numeric_token_count`, `command_verb_count`, `callsign_like_count`; Section 4), which are useful for comparative EDA but are not ground-truth entity labels. The labels used for modeling come from the staged approach in Section 5.9: an LLM *teacher* (Qwen3.5-9B with schema-guided decoding and rule hints) labeled the whole corpus, humans verified small evaluation sets (gold, silver and a frozen held-out set), and small *student* models (spaCy, BERT; Section 5.10) were trained on the curated labels. Students were trained in addition to the LLM because the application needs entity extraction at CPU speed, which a dedicated sequence-labeling model provides and the LLM does not.
 
-The comprehensive EDA phase implemented a small step in this direction: `numeric_token_count`, `command_verb_count`, and `callsign_like_count` (Section 4) are lightweight vocabulary/regex proxies, useful for comparative EDA but explicitly not ground-truth entity labels. The approach implemented for real extraction (Section 5.9) is an LLM-based pass (e.g., using Qwen3.5 Instruct) grounded by a curated aviation-terms dictionary (term/acronym, definition, and example usage, e.g. airport codes, phraseology terms, equipment/procedure acronyms), used both as a way to identify/extract candidate entity spans and as context the LLM can use to disambiguate an acronym with more than one meaning from the surrounding utterance, avoiding the need to train a dedicated sequence-labeling model (e.g. a fine-tuned BERT model). 
-
-> **NOTE:** This is implemented in Section 5.9. Unlike the original plan, small student models (spaCy, BERT) were also trained on the LLM-curated labels (5.10), because the application needs entity extraction at CPU speed that a dedicated sequence-labeling model provides and the LLM does not.
->
-
-Potential target labels include:
+Target labels (nine):
 
 - Callsign
 - Command
+- Facility
 - Altitude
 - Heading
-- Speed
-- Runway
 - Frequency
-- Other operational values
+- Waypoint
+- Runway
+- Squawk code
+
+Speed restrictions were not implemented as a separate label (Section 7.3).
 
 ---
 
 ## 3.4 Candidate Features / Predictors
 
-Different model tasks will require different predictors.
+Different model tasks use different predictors.
 
 ### ASR Model Inputs
 
-The primary predictor for speech recognition will be the:
+The primary predictor for speech recognition is the:
 
 - Raw audio waveform
 
-Potential derived audio representations or features may include:
+Derived audio representations and features:
 
-- Mel-frequency spectrogram
-- Mel-Frequency Cepstral Coefficients (MFCCs)
-- Signal-to-Noise Ratio
-- Root Mean Square (RMS) energy
-- Spectral characteristics
-- Silence percentage
+- Log-Mel spectrogram (the input Whisper consumes; computed on the fly during training and inference, Section 5.8)
+- Root Mean Square (RMS) energy, silence percentage, an SNR dynamic-range proxy, zero-crossing rate and spectral centroid/bandwidth (EDA and error-analysis features, Section 4)
 
-> **NOTE:** For pre-trained transformer-based speech models, the raw or appropriately pre-processed waveform may be used directly rather than manually engineered features.
+> **NOTE:** The ASR models consume the resampled waveform directly through Whisper's own feature extractor; the hand-engineered acoustic features are used for analysis (Research Question 3), not as model inputs. MFCCs were not used.
 >
 
 ---
 
 ### Information-Extraction Model Inputs
 
-Potential predictors include:
+Predictors:
 
 - Transcript tokens
 - Word sequence
@@ -310,18 +306,18 @@ Potential predictors include:
 - Aviation phrasing patterns
 - Numeric expressions
 
-Transformer-based NLP models or `spaCy` models may generate learned contextual representations directly from transcript text.
+The `spaCy` (CNN tok2vec; Honnibal et al., 2020) and BERT student models learn contextual representations directly from transcript text (Section 5.10).
 
 ---
 
 ### Model-Performance Analysis Features
 
-Matches Research Question 3's core/planned split above:
+Matches Research Question 3's characteristics above:
 
-- **Core (implemented):** transmission duration, word count, character count, speech rate, dataset source, RMS energy, silence percentage, an SNR dynamic-range proxy, zero-crossing rate, spectral centroid/bandwidth, and the numeric-token/command-verb/callsign-like proxy counts (all documented with formulas and caveats in Section 4)
-- **Planned (not yet implemented):** true aviation-entity counts from real named-entity extraction (see Section 3.3's LLM+dictionary plan), and speaker role (no source publishes this field, so it remains N/A rather than merely unbuilt)
+- **Acoustic and linguistic:** transmission duration, word count, character count, speech rate, dataset source, RMS energy, silence percentage, an SNR dynamic-range proxy, zero-crossing rate, spectral centroid/bandwidth, and the numeric-token/command-verb/callsign-like proxy counts (all documented with formulas and caveats in Section 4)
+- **Entity-based (implemented, Section 5.8):** aviation-entity counts per utterance from the NER annotations (Section 5.9). Speaker role is not available: no source publishes this field.
 
-These variables can be compared with model performance measurements such as WER to investigate which communication characteristics are associated with higher or lower transcription accuracy.
+These variables were compared with model performance measurements such as WER to investigate which communication characteristics are associated with higher or lower transcription accuracy (Sections 5.7 and 5.8).
 
 ---
 
@@ -334,7 +330,7 @@ The two datasets are preserved separately through ingestion (`_load`, `_standard
 3. **Feature derivation (`_add_utterance_metadata`).** Every acoustic feature (Section 4) is computed inline during the same batched audio-decode pass that already derives `duration_sec`, so no clip is decoded twice. A per-row `try`/`except` around this step records `audio_decode_error` rather than letting one corrupt file crash the whole pipeline; `DataIngestPipeline.max_corrupt_fraction` raises if too many rows fail, catching a systemic problem (e.g. wrong cache dir) rather than quietly proceeding.
 4. **Data-quality checks (`quality.run_quality_checks`).** Missing audio/transcript, zero-duration, corrupt-audio, and true-duplicate rows are dropped, each logged with a reason in an auditable cleaning log; repeated (but not duplicate) transcripts are flagged and retained; see Section 4 for why duplicate audio and repeated phrasing are treated differently, and the actual counts found.
 
-The `DataIngestPipeline` produces a standardized utterance-level analytical table (`utterance_df`, 17,681 rows, saved to `data/processed/utterances.parquet`) with the following structure (the canonical version of this table is `preprocessing.schema.FINAL_UTTERANCE_COLUMNS`, kept in code so this documentation can't silently drift from what the pipeline actually produces; `schema.validate_final_schema` asserts they match on every run):
+The `DataIngestPipeline` (built on Hugging Face `datasets`; Lhoest et al., 2021) produces a standardized utterance-level analytical table (`utterance_df`, 17,681 rows, saved to `data/processed/utterances.parquet`) with the following structure (the canonical version of this table is `preprocessing.schema.FINAL_UTTERANCE_COLUMNS`, kept in code so this documentation can't silently drift from what the pipeline actually produces; `schema.validate_final_schema` asserts they match on every run):
 
 | Column | Description |
 | --- | --- |
@@ -354,8 +350,8 @@ The `DataIngestPipeline` produces a standardized utterance-level analytical tabl
 | `character_count` | Character count of `transcript`. |
 | `speech_rate_wpm` | word_count / (duration_sec / 60); NaN if duration_sec is non-positive. |
 | `numeric_token_count` | Count of ATC numeral-word tokens in `transcript_normalized` (see preprocessing.vocab). |
-| `command_verb_count` | Count of ATC command-verb tokens in `transcript_normalized`; a proxy pending real NER (deferred). |
-| `callsign_like_count` | Count of callsign-like token runs in `transcript_normalized`; a proxy pending real NER (deferred). |
+| `command_verb_count` | Count of ATC command-verb tokens in `transcript_normalized`; a vocabulary proxy (real entity labels come from the NER pipeline in src/ner). |
+| `callsign_like_count` | Count of callsign-like token runs in `transcript_normalized`; a vocabulary proxy (real entity labels come from the NER pipeline in src/ner). |
 | `rms_energy` | Mean per-frame RMS amplitude (unitless, waveform in [-1, 1]); loudness proxy. |
 | `silence_pct` | Percent of the clip librosa.effects.split(top_db=30) marks as below-threshold. |
 | `snr_db_proxy` | P95-P10 gap of per-frame RMS-in-dB; a heuristic dynamic-range proxy, NOT a physical SNR measurement -- comparative use only. |
@@ -366,19 +362,19 @@ The `DataIngestPipeline` produces a standardized utterance-level analytical tabl
 | `is_repeated_transcript` | True if `transcript_normalized` recurs across 2+ rows with *different* audio content (expected fixed ATC phraseology; never dropped -- see preprocessing.quality). |
 | `repeated_transcript_count` | How many rows (post-cleaning) share this row's `transcript_normalized`. |
 
-> **NOTE:** `speaker_role`, real `callsign_count`/`command_count`/`entity_count` (from ground-truth NER, as opposed to the proxy columns above) are not yet included; see Section 3.3's deferred extraction plan. The `DataIngestPipeline` will likely continue to evolve through later iterations of this project (e.g. additional pipeline scripts for model training/evaluation/inference) so the same ingestion logic isn't duplicated.
+> **NOTE:** `speaker_role` is not included because no source publishes it. Entity counts from ground-truth-style NER (as opposed to the proxy columns above) are produced by the NER pipeline (Section 5.9) and stored with its outputs rather than in `utterances.parquet`; Section 5.8 joins them to the ASR results by transcript text.
 
 ---
 
 # 4. Exploratory Data Analysis
 
-The full, EDA is in [notebooks/comprehensive_eda.ipynb](../notebooks/comprehensive_eda.ipynb), which runs cleanly end-to-end. This section summarizes the methodology and the findings that matter most for the project's research questions. Only figures that support a specific stated finding are included here.
+The full EDA is in [notebooks/comprehensive_eda.ipynb](../notebooks/comprehensive_eda.ipynb), which runs cleanly end-to-end. This section summarizes the methodology and the findings that matter most for the project's research questions. Only figures that support a specific stated finding are included here.
 
 ## 4.1 Data Cleansing and Preparation
 
 The corpus started as 17,681 raw rows across both sources (9,559 ATCOSIM + 8,122 ATC-ASR-Dataset) after joining. `preprocessing.quality.run_quality_checks` then ran six ordered checks including missing audio, missing transcript, non-positive duration, corrupt audio, true-duplicate rows, and repeated transcripts. Each stage logs `rows_in`/`rows_flagged`/`rows_removed`/`rows_out` to an auditable cleaning log. Running this process resulted in 0 rows dropped by any check. No corrupt audio, no missing transcripts, no non-positive durations, and no accidental duplicates. The process for identifying duplicates involved a checksum validation in which every one of the 17,681 rows has a unique `audio_checksum`. The final analytical dataset is the full 17,681 rows, saved to `data/processed/utterances.parquet`.
 
-Duplicates required a two-way split. In this context, a duplicate *recording* is on with the same `audio_checksum` **and** the same normalized transcript. If there are any duplicates, they're flagged as accidental data-quality issue and dropped. A duplicate transcript (same wording, different audio) is expected. ATC uses fixed phraseology, so many distinct recordings legitimately share wording. In this case, they're retained and flagged via `is_repeated_transcript`. **20.9% of rows carry a repeated transcript overall, but the rate is very different by source: 31.6% for ATCOSIM vs. 8.2% for ATC-ASR-Dataset**. This is consistent with ATCOSIM's simulated exercises drawing from a smaller, more-scripted set of scenarios than naturalistic real-world traffic. The most-repeated transcripts are short acknowledgements such as "roger", "thank you", "affirm", and "standby". There was one recurring scripted exchange, "contact milan one three four five two good bye", which occrred 15 times. This is the kind of fixed phraseology this rule is designed to preserve.
+Duplicates required a two-way split. In this context, a duplicate *recording* is one with the same `audio_checksum` **and** the same normalized transcript. If there are any duplicates, they're flagged as accidental data-quality issue and dropped. A duplicate transcript (same wording, different audio) is expected. ATC uses fixed phraseology, so many distinct recordings legitimately share wording. In this case, they're retained and flagged via `is_repeated_transcript`. **20.9% of rows carry a repeated transcript overall, but the rate is very different by source: 31.6% for ATCOSIM vs. 8.2% for ATC-ASR-Dataset**. This is consistent with ATCOSIM's simulated exercises drawing from a smaller, more-scripted set of scenarios than naturalistic real-world traffic. The most-repeated transcripts are short acknowledgements such as "roger", "thank you", "affirm", and "standby". There was one recurring scripted exchange, "contact milan one three four five two good bye", which occurred 15 times. This is the kind of fixed phraseology this rule is designed to preserve.
 
 **Missingness is structural**: `recorded_at` is null for 100% of rows in both sources (neither `atcosim`'s nor ATC-ASR-Dataset's filenames embed a recording timestamp; only the retired ATCO2-ASR's did), and `source_id` is null for 100% of `atcosim` rows (its Hugging Face mirror doesn't provide a row id). `utterance_id`/`audio_checksum` are used as unique identity keys and are 100% populated.
 
@@ -386,7 +382,7 @@ Duplicates required a two-way split. In this context, a duplicate *recording* is
 
 ![Acoustic feature distributions by dataset source](../res/figures/acoustic_features_by_source.png)
 
-Six acoustic features (RMS energy, silence percentage, an SNR dynamic-range proxy, zero-crossing rate, spectral centroid, spectral bandwidth; formulas, units, and assumptions documented in `preprocessing/audio_features.py`) were computed per utterance directly from the decoded waveform, inline in the same pass that derives `duration_sec`, so no clip is decoded twice.
+Six acoustic features (computed with librosa; McFee et al., 2015: RMS energy, silence percentage, an SNR dynamic-range proxy, zero-crossing rate, spectral centroid, spectral bandwidth; formulas, units, and assumptions documented in `preprocessing/audio_features.py`) were computed per utterance directly from the decoded waveform, inline in the same pass that derives `duration_sec`, so no clip is decoded twice.
 
 **Finding: real ATC audio (ATC-ASR-Dataset) occupies a measurably narrower-bandwidth region of acoustic feature space than simulated ATCOSIM audio.** Mean spectral centroid is 1,460 Hz for ATC-ASR-Dataset vs. 2,777 Hz for ATCOSIM; spectral bandwidth is 1,087 Hz vs. 1,657 Hz; zero-crossing rate is 0.135 vs. 0.283: all three consistently lower for the real-audio source. This lines up with how each corpus was produced: real ATC audio is transmitted over a narrowband VHF radio channel (traditionally ~300-3,400 Hz voice bandwidth), which filters out exactly the higher-frequency content these three features measure, while ATCOSIM's recordings are captured full-bandwidth in a studio/lab setting with no radio-channel effect. ATC-ASR-Dataset also shows higher RMS-energy variance (std 0.045 vs. 0.011), consistent with uncontrolled real-world recording conditions (variable mic gain/distance, radio squelch) that a simulated corpus wouldn't have.
 
@@ -406,7 +402,7 @@ ATC-ASR-Dataset also shows a *higher* mean speech rate (187.7 vs. 174.4 WPM) des
 
 ![Callsign/command proxy distributions by dataset source](../res/figures/callsign_command_proxy_by_source.png)
 
-ATCOSIM has a much higher command-verb detection rate (only 25.7% of its rows have zero detected command verbs, vs. 54.8% for ATC-ASR-Dataset), which is again consistent with ATCOSIM's scripted scenarios emphasizing standard instruction phraseology more systematically, while real traffic includes more short acknowledgements and readbacks with no command verb present. Callsign-like detection is more similar between sources (~50% vs. ~55% zero-detection); this proxy's fixed, non-exhaustive airline-word vocabulary is the likely limiting factor for both sources equally. Ideally the planned LLM-based extraction (Section 3.3) will close this gap once implemented.
+ATCOSIM has a much higher command-verb detection rate (only 25.7% of its rows have zero detected command verbs, vs. 54.8% for ATC-ASR-Dataset), which is again consistent with ATCOSIM's scripted scenarios emphasizing standard instruction phraseology more systematically, while real traffic includes more short acknowledgements and readbacks with no command verb present. Callsign-like detection is more similar between sources (~50% vs. ~55% zero-detection); this proxy's fixed, non-exhaustive airline-word vocabulary is the likely limiting factor for both sources equally. The LLM-assisted extraction in Section 5.9 replaces these proxies with real entity labels.
 
 ## 4.4 Outliers
 
@@ -437,7 +433,7 @@ Every analysis in this section converges on the same underlying signal, approach
 
 # 5. Machine Learning
 
-This section covers the project's modeling work in two layers. Sections 5.1-5.7 describe the ASR prototype (Research Question 1, Section 2.3) built on a 100-utterance evaluation subset and a 1,000-row fine-tune of `whisper-small.en`. Sections 5.8-5.11 report the production results of the standalone pipelines: full-dataset ASR training scored on all 1,909 test utterances (5.8, including entity-level accuracy and Research Question 3), LLM-assisted aviation information extraction and student NER models (5.9-5.10, Research Question 2), and CPU inference benchmarks (5.11). Section 5.12 describes the ClearanceIQ Streamlit application that integrates these models, and Section 5.13 summarizes results, limitations and next steps. The full analysis is in [notebooks/machine_learning.ipynb](../notebooks/machine_learning.ipynb), which executes cleanly end to end (Sections A-E prototype; F-H load saved production results); where the two layers disagree, the production results supersede the prototype figures.
+This section covers the project's modeling work in two layers. Sections 5.1-5.7 describe the ASR prototype (Research Question 1, Section 2.3) built on a 100-utterance evaluation subset and a 1,000-row fine-tune of `whisper-small.en`. Sections 5.8-5.11 report the production results of the standalone pipelines: full-dataset ASR training scored on all 1,909 test utterances (5.8, including entity-level accuracy and Research Question 3), LLM-assisted aviation information extraction and student NER models (5.9-5.10, Research Question 2), and CPU inference benchmarks (5.11). Section 6 describes the ClearanceIQ Streamlit application that integrates these models, and Section 7 gives the conclusions, limitations and future research. The full analysis is in [notebooks/machine_learning.ipynb](../notebooks/machine_learning.ipynb), which executes cleanly end to end (Sections A-E prototype; F-H load saved production results); where the two layers disagree, the production results supersede the prototype figures.
 
 ## 5.1 Modeling Infrastructure
 
@@ -460,8 +456,8 @@ As a practical side effect, this infrastructure was validated across two differe
 
 **Three ASR conditions, evaluated on the same fixed test records:**
 
-1. **Baseline**: `openai/whisper-medium.en` (769M parameters), a generic, English-only Whisper checkpoint with no ATC-specific training. Establishes a zero-shot reference point.
-2. **Comparison**: `jacktol/whisper-medium.en-fine-tuned-for-ATC`, a Whisper medium.en checkpoint already fine-tuned on `jacktol/ATC-ASR-Dataset` — the same underlying corpus behind this project's `atc-asr-dataset` source. **Disclosed limitation:** the published dataset's split sizes match almost exactly what this project's pipeline independently preserves for that source, but there is no public confirmation that the fine-tuning run actually respected that split boundary. Any `atc-asr-dataset`-subset result for this model should be read as carrying an unverified train/test-overlap risk, not a clean held-out result.
+1. **Baseline**: `openai/whisper-medium.en` (769M parameters; Radford et al., 2022), a generic, English-only Whisper checkpoint with no ATC-specific training. Establishes a zero-shot reference point.
+2. **Comparison**: `jacktol/whisper-medium.en-fine-tuned-for-ATC` (jacktol, n.d.-b), a Whisper medium.en checkpoint already fine-tuned on `jacktol/ATC-ASR-Dataset` — the same underlying corpus behind this project's `atc-asr-dataset` source. **Disclosed limitation:** the published dataset's split sizes match almost exactly what this project's pipeline independently preserves for that source, but there is no public confirmation that the fine-tuning run actually respected that split boundary. Any `atc-asr-dataset`-subset result for this model should be read as carrying an unverified train/test-overlap risk, not a clean held-out result.
 3. **Fine-tuned whisper-small.en**: `openai/whisper-small.en` (244M parameters), fine-tuned by this project on its own train split (Section 5.4). Unlike the comparison model, this condition has no leakage risk against the `atc-asr-dataset` test split, since the whole corpus was built leakage-safe from the start (Section 3.5).
 
 ## 5.3 Baseline and Domain-Adapted Comparison Results
@@ -479,7 +475,7 @@ As expected from Section 4's acoustic domain-gap finding, the baseline's WER is 
 
 **Target model**: `openai/whisper-small.en` rather than medium.en. Full fine-tuning keeps fp32 master weights (for `fp16=True` mixed-precision training) plus Adam's two fp32 moment buffers plus fp32 gradients; for medium.en (769M parameters) that's roughly 4 × 769M × 4 bytes ≈ 12.3 GB just for weights, gradients, and optimizer state, before any activations — more than an 8GB laptop GPU has available. `whisper-small.en` (244M parameters) needs roughly a quarter of that and fits comfortably.
 
-**Training data**: a stratified 1,000-row sample of the ~13,956-row train split (466 ATC-ASR-Dataset / 534 ATCOSIM), trained for 3 epochs, with a 200-row stratified validation subset for per-epoch checkpoint selection (never the test split). This validates the full training setup (data preparation, a custom Whisper data collator, WER-based `compute_metrics`, checkpointing) end to end, with the same sample-size knob used for the evaluation subset making it straightforward to scale up to the full train split later.
+**Training data**: a stratified 1,000-row sample of the ~13,956-row train split (466 ATC-ASR-Dataset / 534 ATCOSIM), trained for 3 epochs, with a 200-row stratified validation subset for per-epoch checkpoint selection (never the test split). This validates the full training setup (data preparation, a custom Whisper data collator, WER-based `compute_metrics` (WER computed with `jiwer`; Jitsi, n.d.; models via Hugging Face Transformers, Wolf et al., 2020), checkpointing) end to end, with the same sample-size knob used for the evaluation subset making it straightforward to scale up to the full train split later.
 
 **Hyperparameters**: learning rate 1e-5, `per_device_train_batch_size=4` with `gradient_accumulation_steps=8` (effective batch size 32), fp16 mixed precision, 3 epochs, best checkpoint selected by validation WER. **An engineering finding worth recording:** an initial attempt at `per_device_train_batch_size=8` pinned the GPU at 98% VRAM and caused severe memory-pressure slowdown (step time climbed from roughly 4.4 seconds to over 18 seconds as training progressed); halving the batch size while doubling gradient accumulation (same effective batch size, far less peak memory) fixed it completely.
 
@@ -506,7 +502,7 @@ Word-level alignment (substitutions, deletions, insertions) on the worst-scoring
 | Short-word / sign-off deletion | A trailing acknowledgement or sign-off word dropped entirely. | Comparison model: "tschuss" deleted |
 | Homophone confusion | A word substituted for one that sounds identical or near-identical but changes meaning or spelling. | Baseline: "rhein" → "rhine"; "four" → "for" |
 
-The two hallucination categories are both documented Whisper phenomena rather than bugs specific to this project's pipeline (Radford et al., 2022; see also the practitioner write-up on the repetition-loop pattern at https://metawhisp.com/blog/whisper-repeating-word-loop-fix/). Because fine-tuning did not eliminate the repetition-loop pattern, future work will need a generation-time mitigation (e.g., a repetition penalty or `no_repeat_ngram_size` on `.generate()`, or post-hoc output filtering) rather than relying on more training data alone.
+The two hallucination categories are both documented Whisper phenomena rather than bugs specific to this project's pipeline (Radford et al., 2022; see also the practitioner write-up on the repetition-loop pattern, metawhisp, n.d.). Because fine-tuning did not eliminate the repetition-loop pattern, future work will need a generation-time mitigation (e.g., a repetition penalty or `no_repeat_ngram_size` on `.generate()`, or post-hoc output filtering) rather than relying on more training data alone.
 
 **A methodological finding that follows directly from these outliers:** a single runaway output can dominate a corpus-level WER average. The baseline's 161.9% aggregate real-audio WER (5.3) reflects a *median* per-utterance WER of only 55.6% once the hallucinated outliers are set aside — still clearly worse than its simulated-audio performance, but far less extreme than the aggregate implies. The fine-tuned `whisper-small.en` model shows the identical pattern (82.9% aggregate vs. a 33.3% median). This is a caution against reading a single aggregate WER number in isolation, and the reason this project reports a per-utterance error taxonomy alongside it rather than instead of it.
 
@@ -540,7 +536,7 @@ The prototype in 5.4 fine-tuned on 1,000 of the 13,956 training rows and was eva
 
 1. **whisper-small.en, full fine-tune, 3 epochs**: the prototype setup scaled to the whole train split (learning rate 1e-5).
 2. **whisper-small.en, up to 8 epochs** with early stopping (patience 2 epochs on validation WER; it never triggered, so all 8 epochs ran, and the best epoch by validation WER was 6): does training longer help?
-3. **whisper-medium.en with LoRA adapters** (Hu et al., 2021): low-rank adapters (rank 32, alpha 64, dropout 0.05) on the attention and feed-forward projections, on a frozen fp16 base. This trains 34.6M of 798.5M parameters (4.3%), so a model that cannot be fully fine-tuned on an 8 GB GPU (5.4: about 12.3 GB for weights, gradients and optimizer state) fits easily. LoRA needs a much higher learning rate than full fine-tuning (5e-4 here versus 1e-5), the effective batch is 32 (2 x 16 accumulation), training runs 3 epochs, and the adapters are merged into a plain fp16 model afterwards for deployment.
+3. **whisper-medium.en with LoRA adapters** (Hu et al., 2021; implemented with PEFT, Mangrulkar et al., 2022): low-rank adapters (rank 32, alpha 64, dropout 0.05) on the attention and feed-forward projections, on a frozen fp16 base. This trains 34.6M of 798.5M parameters (4.3%), so a model that cannot be fully fine-tuned on an 8 GB GPU (5.4: about 12.3 GB for weights, gradients and optimizer state) fits easily. LoRA needs a much higher learning rate than full fine-tuning (5e-4 here versus 1e-5), the effective batch is 32 (2 x 16 accumulation), training runs 3 epochs, and the adapters are merged into a plain fp16 model afterwards for deployment.
 
 **Comparison conditions** are zero-shot `whisper-small.en` and `whisper-medium.en` (no domain training) and the off-the-shelf `jacktol/whisper-medium.en-fine-tuned-for-ATC` model, all scored on the same full test split.
 
@@ -627,11 +623,11 @@ The prototype analysis (5.7) joined WER to utterance characteristics on 100 utte
 
 ## 5.9 Aviation Information Extraction: LLM-Assisted Labeling at Scale (Research Question 2)
 
-Neither corpus has entity labels (Section 3.3), so the labels are produced in stages: an LLM *teacher* labels the whole corpus, humans verify small evaluation sets, and small *student* models (5.10) are trained on the curated labels. The pipeline is `scripts/run_ner_annotate.py`, then `scripts/run_ner_curate.py`, then `scripts/run_ner_train.py` (code in `src/ner/`). Nine labels are used: CALLSIGN, COMMAND, FACILITY, ALTITUDE, HEADING, FREQUENCY, WAYPOINT, RUNWAY and SQUAWK.
+Neither corpus has entity labels (Section 3.3), so the labels are produced in stages: an LLM *teacher* (Qwen3.5; Qwen Team, n.d.) labels the whole corpus, humans verify small evaluation sets, and small *student* models (5.10) are trained on the curated labels. The pipeline is `scripts/run_ner_annotate.py`, then `scripts/run_ner_curate.py`, then `scripts/run_ner_train.py` (code in `src/ner/`). Nine labels are used: CALLSIGN, COMMAND, FACILITY, ALTITUDE, HEADING, FREQUENCY, WAYPOINT, RUNWAY and SQUAWK.
 
 ### Annotator Design
 
-- **Model and serving.** Qwen3.5-9B (4-bit weights) served with vLLM on the 8 GB development GPU, partly offloaded to CPU memory. The 4B model fits on the GPU directly and was used for most prompt experiments.
+- **Model and serving.** Qwen3.5-9B (4-bit weights) served with vLLM (Kwon et al., 2023) on the 8 GB development GPU, partly offloaded to CPU memory. The 4B model fits on the GPU directly and was used for most prompt experiments.
 - **Schema-guided decoding.** Output is constrained to a JSON schema, so every response parses. Spans are validated against the transcript, and an invalid response is retried with a message that names the specific violation.
 - **Rule hints and post-processing.** Cheap rules suggest candidate spans in the prompt; a normalizer merges adjacent FACILITY spans and expands COMMAND phrases; a missed-verb check triggers a retry when a command verb has no span.
 - **Annotation guidelines** (COMMAND, FACILITY and callsign rules) were settled with the project author on concrete ambiguous examples: for instance, generic verbs count as commands, a cleared phrase is one whole COMMAND span, and partial callsigns are labeled.
@@ -652,7 +648,7 @@ Neither corpus has entity labels (Section 3.3), so the labels are produced in st
 
 ### Human-Verified Evaluation Sets
 
-Evaluating the teacher needs labels it did not produce. Each candidate utterance was labeled by two annotators, the 9B model and Claude (blind, from the transcript alone), and the project author adjudicated **only the disagreements**, with options A/B randomly assigned so the reviewer could not tell which annotator was which. Four label sets result:
+Evaluating the teacher needs labels it did not produce. Each candidate utterance was labeled by two annotators, the 9B model and Claude (Anthropic, n.d.; blind, from the transcript alone), and the project author adjudicated **only the disagreements**, with options A/B randomly assigned so the reviewer could not tell which annotator was which. Four label sets result:
 
 | Set | Utterances | Trust | Use |
 | --- | --- | --- | --- |
@@ -701,7 +697,7 @@ The teacher's labels are not all trustworthy, so cheap signals flag doubtful one
 
 ## 5.10 Student NER Models
 
-The teacher takes about 3 seconds per utterance on a GPU, so it cannot run inside the application. Two small student models are trained on the curated labels and scored against the same human-verified sets: a spaCy blank pipeline (CNN tok2vec with a NER head) and a BERT token classifier. Each is trained twice, with and without **rare-label balancing** (oversampling utterances that contain SQUAWK, HEADING, RUNWAY and WAYPOINT spans). Scoring is exact-match span F1 (label and character offsets must match), with micro, per-label and macro averages and bootstrap confidence intervals over utterances.
+The teacher takes about 3 seconds per utterance on a GPU, so it cannot run inside the application. Two small student models are trained on the curated labels and scored against the same human-verified sets: a spaCy blank pipeline (CNN tok2vec with a NER head; Honnibal et al., 2020) and a BERT token classifier. Each is trained twice, with and without **rare-label balancing** (oversampling utterances that contain SQUAWK, HEADING, RUNWAY and WAYPOINT spans). Scoring is exact-match span F1 (label and character offsets must match), with micro, per-label and macro averages and bootstrap confidence intervals over utterances.
 
 | Model | Held-out F1 (n=100) | Gold F1 (n=95) |
 | --- | --- | --- |
@@ -723,7 +719,7 @@ The teacher takes about 3 seconds per utterance on a GPU, so it cannot run insid
 
 ## 5.11 Inference Performance and CPU Deployment
 
-The application must run on devices without a GPU, so latency is a design constraint, and a faster configuration is only acceptable if it is not less accurate. `scripts/benchmark_inference.py` times each configuration (model, backend, device, threads) in its own process at batch size 1 on the same utterances, recording latency, real-time factor (RTF; below 1 is faster than real time), memory and WER together. Test hardware: an Intel i9-12900H laptop (a high-end CPU, so slower devices will be slower in absolute terms) with an RTX 3070 Ti GPU under WSL2. Every experiment and decision is logged in `res/benchmarks/EXPERIMENTS.md`.
+The application must run on devices without a GPU, so latency is a design constraint, and a faster configuration is only acceptable if it is not less accurate. `scripts/benchmark_inference.py` times each configuration (CPU backends include CTranslate2; Klein et al., 2020) (model, backend, device, threads) in its own process at batch size 1 on the same utterances, recording latency, real-time factor (RTF; below 1 is faster than real time), memory and WER together. Test hardware: an Intel i9-12900H laptop (a high-end CPU, so slower devices will be slower in absolute terms) with an RTX 3070 Ti GPU under WSL2. Every experiment and decision is logged in `res/benchmarks/EXPERIMENTS.md`.
 
 **Baseline (24 utterances; WER differences of a point or two are noise at this size).**
 
@@ -772,33 +768,33 @@ Ten seconds is the floor without retraining; shorter windows collapse into hallu
 
 **Caveats.** One high-end laptop CPU was measured and thread-count rows are approximate on a hybrid CPU; model load takes 5-6 s, so the application must keep the model in memory; transcripts longer than 30 s need chunking.
 
-## 5.12 ClearanceIQ: Streamlit Application
+# 6. Application of the Trained Models: ClearanceIQ
 
-The trained models are integrated into **ClearanceIQ** (`app/`, run with `./run-app.sh`), an academic research prototype that turns an ATC radio clip into a transcript, a structured clearance and an optional plain-English explanation. It is a front end over the artifacts from 5.8-5.11 (the CTranslate2 int8 medium.en + LoRA ASR model and the spaCy NER models) and runs entirely on a CPU. It is not certified or validated for operational use, and says so on every screen.
+The trained models are integrated into **ClearanceIQ** (`app/`, run with `./run-app.sh`), an academic research prototype built with Streamlit (Streamlit Inc., n.d.) that turns an ATC radio clip into a transcript, a structured clearance and an optional plain-English explanation. It is a front end over the artifacts from Sections 5.8-5.11 (the CTranslate2 int8 medium.en + LoRA ASR model and the spaCy NER models) and runs entirely on a CPU. **It is not validated, certified or intended for operational use**, and says so on every screen (Section 7.3).
 
-### Processing Pipeline
+## 6.1 Processing Pipeline
 
 > **Audio in → audio preparation → ASR → entity extraction → word alignment → (optional) explanation / voice read-back**
 
 1. **Input.** Bundled labeled samples (test and validation clips, plus the longest clip in the dataset to demonstrate splitting), file upload (wav, mp3, flac, ogg, m4a; up to 50 MB and 5 minutes), or microphone recording.
-2. **Audio preparation** (`app/services/audio_prep.py`). Decoding and validation (clear errors for silent, too-short or unreadable audio), conversion to mono 16 kHz, trimming of leading and trailing silence, and splitting at pauses into segments of at most 28 s, since Whisper's window is 30 s (5.11 notes that longer transcripts need chunking). The applied steps and an estimated SNR are shown to the user.
-3. **ASR** (`app/services/models.py`, `src/asr/inference.py`). `best_transcriber()` selects the CPU configuration chosen in 5.11 (CTranslate2 int8, dynamic encoder windows, 4 threads). Models are cached for the life of the server so the 5-6 s load is paid once.
-4. **Entity extraction.** The user chooses between the two student spaCy models from 5.10 (standard, or rare-label balanced); the nine labels from 5.9 are tagged in about a millisecond per segment. The BERT students from 5.10 are deliberately not offered: they scored the same as spaCy on human labels (0.874 against 0.871 held-out F1, within noise), but need a GPU for comparable speed (about 2,200 against about 3,700 utterances per second) and are far larger on disk than spaCy's roughly 4 MB, which would add download size and CPU latency with no accuracy benefit.
+2. **Audio preparation** (`app/services/audio_prep.py`). Decoding and validation (clear errors for silent, too-short or unreadable audio), conversion to mono 16 kHz, trimming of leading and trailing silence, and splitting at pauses into segments of at most 28 s, since Whisper's window is 30 s (Section 5.11 notes that longer transcripts need chunking). The applied steps and an estimated SNR are shown to the user.
+3. **ASR** (`app/services/models.py`, `src/asr/inference.py`). `best_transcriber()` selects the CPU configuration chosen in Section 5.11 (CTranslate2 int8, dynamic encoder windows, 4 threads). Models are cached for the life of the server so the 5-6 s load is paid once.
+4. **Entity extraction.** The user chooses between the two student spaCy models from Section 5.10 (standard, or rare-label balanced); the nine labels from Section 5.9 are tagged in about a millisecond per segment. The BERT students from Section 5.10 are deliberately not offered: they scored the same as spaCy on human labels (0.874 against 0.871 held-out F1, within noise), but need a GPU for comparable speed (about 2,200 against about 3,700 utterances per second) and are far larger on disk than spaCy's roughly 4 MB, which would add download size and CPU latency with no accuracy benefit.
 5. **Word alignment** (`app/services/align.py`). Word-level timings are derived for the live transcript (below).
 
-### Interface
+## 6.2 Interface
 
 - **Live transcript.** Under the audio player, the word being spoken is highlighted during playback and clicking a word seeks the player to it. The playhead is synchronized across the waveform and the Mel spectrogram.
 - **Transcript & entities tab.** A clearance card grouping entities by type, the displaCy entity-highlighted transcript, a color legend, a copyable plain transcript, and timing metrics (transcription time, entity time).
 - **Evidence tab.** On labeled samples, WER, CER, entity precision/recall/F1 and a word-level diff against the ground truth, with a note when a clip comes from the training or validation split (so its score is a demo rather than an evaluation).
-- **Models tab.** Hugging Face-style model cards for the ASR model and both NER variants (data, scores from 5.8 and 5.10, limitations), and a side-by-side NER comparison.
+- **Models tab.** Hugging Face-style model cards for the ASR model and both NER variants (data, scores from Sections 5.8 and 5.10, limitations), and a side-by-side NER comparison.
 - **Audio analysis tab.** Waveform, Mel spectrogram, duration, speech rate and the estimated SNR, using the same acoustic features as the EDA (Section 4).
 - **Explain (AI) tab.** An optional plain-English explanation from Claude (Haiku or Sonnet 5.5). It is disabled until the user supplies an Anthropic API key and presses **Test key**; only the transcript text and entity tags are sent (never audio), and the key lives in the browser session only. The prompt restricts the model to the transcript and tags, asks it to flag corrections, repeats and likely recognition errors, and forbids operational advice. The response is schema-constrained.
 - **Design.** A radar-themed splash page, a dark theme and a sticky header with a persistent research-prototype disclaimer.
 
-### Voice Read-back with Kokoro TTS (Experimental)
+## 6.3 Voice Read-back with Kokoro TTS (Experimental)
 
-As an experiment, the application can speak the recognized transcript back using **Kokoro-82M** (Hexgrad), an open-weight (Apache-2.0), 82M-parameter text-to-speech model that outputs 24 kHz audio and is small enough to run on a CPU. This is a pure post-process after ASR (`app/services/speech.py`): it takes the final transcript text and synthesizes it; it does not touch the original audio and does not feed back into recognition or entity extraction.
+As an experiment, the application can speak the recognized transcript back using **Kokoro-82M** (Hexgrad, 2025), an open-weight (Apache-2.0), 82M-parameter text-to-speech model that outputs 24 kHz audio and is small enough to run on a CPU. This is a pure post-process after ASR (`app/services/speech.py`): it takes the final transcript text and synthesizes it; it does not touch the original audio and does not feed back into recognition or entity extraction.
 
 - **Purpose.** Radio audio is narrowband, noisy and fast (Section 4.2), so hearing the model's interpretation in a clean, evenly paced voice gives a quick check of what the system understood, and offers a way to re-present a transmission with less noise and more consistent pacing. Hearing a transcript error spoken aloud is also a useful, informal way to notice a wrong digit or callsign.
 - **Interface.** A "Voice read-back (experimental)" panel in the Transcript & entities tab with a voice choice (three Kokoro voices) and a speed slider (0.7-1.3x). Audio is generated on request and cached per (transcript, voice, speed), so reruns are free.
@@ -806,83 +802,132 @@ As an experiment, the application can speak the recognized transcript back using
 - **Verification so far.** The synthesis service is unit-tested against a stand-in pipeline (text cleanup, chunk concatenation, WAV format, empty-transcript error). It has **not** yet been evaluated with the real Kokoro weights, so latency, memory and voice quality on this project's CPU target are unmeasured, and no listening study has been done.
 - **Limitations to evaluate.** The corpora spell numbers as digit words in lowercase ("six zero zero zero"), so output should be spoken correctly, but ATC-specific pronunciations ("niner", "tree", "fife", airline names, fix names such as "praha") are not guaranteed to be pronounced as a controller would say them. The voice is a re-synthesis of the *transcript*, so it will faithfully repeat any ASR error, and a fluent voice can make a wrong transcript sound more trustworthy than it is. For that reason it is labeled experimental and carries the same research-prototype disclaimer. It is not a substitute for listening to the original audio.
 
-### Distribution and Setup
+## 6.4 Distribution and Setup
 
 A fresh clone needs the model files (git-ignored), not the datasets: the labeled sample clips and their ground truth are committed in `app/samples/`. `./setup.sh` creates the conda environment (and installs `espeak-ng` for the voice read-back), and `./download-models.sh --profile cpu` fetches the models from the project's S3 bucket. Because that bucket is private, a fallback is provided: `clearanceiq-models.zip` (about 0.7 GB, containing only what the app loads: the CTranslate2 ASR model, both spaCy NER models and the small metrics files behind the model cards) is hosted in a public, view-only Google Drive folder, and the download script uses it automatically when no AWS credentials are found. Because a public download location could be altered, the zip's sha256 is committed to the repository (`app-models.sha256`) and verified before extraction, and extraction refuses any path outside `models/`. The bundle is built with `scripts/app_bundle.py package`. It does not include what the notebooks and training need (full-precision model, results CSVs, NER training data), which remain S3-only.
 
-### Testing
+## 6.5 Testing
 
 `app/tests/` holds unit tests (audio preparation, alignment, metrics, explanations, speech synthesis), headless Streamlit `AppTest` UI tests (including recovery from stale session state after a code reload) and Playwright browser tests. Sample clips and README screenshots are rebuilt by `scripts/build_app_samples.py` and `scripts/capture_app_screenshots.py`.
 
-### Application Limitations
+## 6.6 Application Limitations
 
 - Single-user local prototype; there is no live radio stream. Input is a recorded clip, so the "live against recorded input" design question is answered as recorded-only for now.
-- Scores shown on one sample clip are anecdotal; the test-set results in 5.8 and 5.10 are the research measurements.
+- Scores shown on one sample clip are anecdotal; the test-set results in Sections 5.8 and 5.10 are the research measurements.
 - The explanation feature depends on an external API and on a user-supplied key, and is itself an LLM's reading of an automatic transcript, so it can repeat or add to recognition errors despite the prompt constraints.
 - The application does not confirm clearances, detect conflicts or raise safety alerts.
 
-## 5.13 Summary, Limitations, and Next Steps
+---
 
-**Research Question 1 (ASR).** The prototype (5.3-5.7) compared a generic baseline, a domain-adapted comparison model and a fine-tuned `whisper-small.en` model on 100 utterances. The full-dataset experiments (5.8) trained on all 13,956 training rows and were scored on all 1,909 test utterances. The selected **whisper-medium.en + LoRA** model reaches **3.8% WER overall, 7.5% on real audio and 1.2% on simulated audio**, against 35.7% for the zero-shot model, and is significantly better on real audio than the off-the-shelf ATC model (9.1%; paired difference -1.5 points, 95% CI -2.4 to -0.6). It preserves 93.5% of aviation entities; callsigns are its weakest entity (recall 0.886).
+# 7. Conclusions, Limitations, and Future Research
 
-**Research Question 2 (information extraction).** A Qwen3.5-9B annotator with schema-guided decoding, rule hints and normalization labeled all 15,083 utterances in 12.5 hours, reaching span F1 0.878 against a frozen human-verified held-out set (5.9). Routing signals isolated the doubtful third of the labels, and spaCy and BERT students trained on the rest match the teacher on human labels (5.10). The selected spaCy model with rare-label balancing is about 4 MB and runs at about 3,700 utterances per second on a CPU.
+## 7.1 Answers to the Research Questions
 
-**Research Question 3 (characteristics and performance).** On the full test split, short transmissions are hardest (real-audio WER 14.6% under 2 s against about 6% beyond 3 s), entity-rich transmissions are easier, and per-utterance correlations are weak (|rho| at most 0.17) (5.8).
+**Research Question 1: How accurately can general-purpose and aviation-domain-adapted speech recognition models transcribe ATC communications?**
+*Very accurately once adapted to the domain; general-purpose models are not usable as-is.* Zero-shot `whisper-medium.en` reaches 35.7% WER overall and 53.6% on real audio (and fails catastrophically on some clips; Section 5.5). The off-the-shelf ATC model reaches 12.4% overall and 9.1% on real audio. The selected **`whisper-medium.en` + LoRA** model, trained on the full train split and scored once on all 1,909 test utterances, reaches **3.8% overall, 7.5% on real audio and 1.2% on simulated audio**. On real audio it is significantly better than the off-the-shelf ATC model (paired difference -1.5 points, 95% CI -2.4 to -0.6), although that model's number carries an unverified train/test-overlap risk (Section 5.2). Aviation-specific accuracy is weaker than the WER suggests: the selected model preserves 93.5% of reference entities (0.856 entity F1 on real audio), and callsigns are its weakest entity (recall 0.886). CER and the vocabulary-proxy callsign, numeric and command recall were measured on the 100-utterance prototype (Sections 5.3 and 5.6); the full-test evaluation uses WER and entity-level recall.
 
-**Deployment.** On a CPU the ASR model runs at about 0.7 s per utterance (RTF about 0.2, 2.2 GB) through CTranslate2 int8 with dynamic encoder windows, with accuracy indistinguishable from the GPU model (5.11). These models are integrated in the ClearanceIQ Streamlit application (5.12), which adds live word-synchronized transcripts, a clearance card, evidence against ground truth, optional Claude explanations and an experimental Kokoro text-to-speech read-back.
+**Research Question 2: Can NLP techniques reliably identify operational aviation information from ATC transcripts?**
+*Yes for well-structured categories, less reliably for ambiguous ones.* The LLM teacher reaches span F1 0.878 (95% CI 0.838-0.915) on a frozen human-verified held-out set, and the student spaCy model selected for the application reaches 0.861 (the four students range from 0.861 to 0.874, within noise of the teacher; the paired confidence interval for spaCy-balanced includes zero). Per-label held-out F1 is high for RUNWAY (1.000), ALTITUDE (0.939), COMMAND (0.918) and CALLSIGN (0.910) and lower for FACILITY (0.817), FREQUENCY (0.757) and WAYPOINT (0.735); HEADING and SQUAWK have too few held-out spans to score. The task itself is ambiguous: two independent annotators agreed exactly on only 60-62% of utterances. The spaCy student is about 4 MB and runs on a CPU at about 3,700 utterances per second.
 
-**Known limitations, disclosed rather than hidden:**
+**Research Question 3: What acoustic and linguistic characteristics are associated with speech-recognition performance?**
+*Recording origin and transmission length matter most; everything else is weak.* Real audio is much harder than simulated audio (7.5% vs. 1.2% WER for the selected model), and the acoustic EDA shows why (narrowband radio audio, Section 4.2). Within real audio, very short transmissions are hardest (14.6% WER under 2 s against about 6% beyond 3 s), and entity-rich transmissions are easier, not harder. Per-utterance Spearman correlations are weak for the selected model (|rho| at most 0.17; the strongest is the SNR proxy at -0.17) and fine-tuning weakened the dependence on length (rho for duration -0.32 for zero-shot `medium.en` vs. -0.05 for the selected model).
 
-- The off-the-shelf comparison model's real-audio numbers carry an unverified train/test-overlap risk (5.2), and the project's models' simulated-audio numbers are not a fair generalization test against it for the mirror-image reason (ATCOSIM was in their training data but never in the comparison model's).
-- Each model was trained once; run-to-run variation (a few tenths of a point, 5.4) is not in the confidence intervals.
-- Entity-level ASR accuracy (5.8) uses NER-derived reference entities, which are not human-verified, and the NER evaluation sets are small (95-100 utterances) and partly agreed-by-annotators rather than individually reviewed.
-- Students inherit the teacher's label noise, and 4,865 flagged utterances are unreviewed and excluded from training.
-- The scoring normalizer does not reconcile "nine" with "niner" or decompose alphanumeric callsigns, and the "request" verb is not yet decided as a COMMAND.
-- Latency was measured on one high-end laptop CPU.
-- The ClearanceIQ application has been exercised through automated tests and the bundled samples, but has not been user-tested with controllers or pilots. The Kokoro voice read-back (5.12) has been tested only with a stand-in synthesizer, so its latency, pronunciation of ATC phraseology and usefulness are unmeasured.
+## 7.2 Supported Conclusions and Exploratory Observations
 
-**Next steps**, in order:
+**Supported conclusions** (measured on the full 1,909-utterance test split with confidence intervals, or against human-verified labels):
 
-1. **Evaluate and refine ClearanceIQ (5.12).** The application is built; remaining work is measurement and the open design questions: voice-activity splitting of long recordings, raw against cleaned transcript display, and feedback from aviation users. For the Kokoro read-back: install and benchmark it on the CPU target (latency, RTF, memory), listen to ATC phraseology (digits, "niner/tree/fife", callsigns, fix names), add a pronunciation map if needed, and decide whether to keep it.
-2. **Train the LoRA model for about 8 epochs (hypothesis, not yet tested).** The LoRA model's validation WER was still falling at epoch 3 (8.5%, 5.7%, 4.3%), unlike the small model, which plateaued by epochs 4-6 (validation loss rose after epoch 3). The small model's extra epochs gave only a marginal gain, the LoRA learning rate (5e-4) was a single untuned choice, and the run would cost about 10 GPU-hours (239 minutes for 3 epochs). A learning-rate comparison and a higher rank are natural companions.
-3. **Human review of the 4,865 flagged NER utterances**, rare labels first, then retrain the students on the larger human-verified set.
-4. **Fine-tune with 6-8 s encoder windows** so the floor drops below 10 s (the encoder would shrink a further 30-40%), and benchmark on the real target devices, including 2-thread configurations.
+- Domain fine-tuning removes most ASR error: 35.7% to 3.8% WER overall for `medium.en`, and 53.6% to 7.5% on real audio.
+- The selected model is significantly better on real audio than the off-the-shelf ATC model (subject to that model's leakage caveat), and entity-level metrics separate the models far more sharply than WER (entity F1 0.935 vs. 0.754 despite 7.5% vs. 9.1% real-audio WER).
+- The student NER models match the LLM teacher on human-verified labels (paired difference for spaCy-balanced -0.017, CI -0.047 to +0.013).
+- CTranslate2 int8 with dynamic encoder windows runs at about 0.7 s per utterance on a laptop CPU with no measurable accuracy cost on 300 paired utterances (difference from GPU fp16 -0.25 points, CI -0.70 to +0.22); encoder windows below 10 s collapse into hallucination without retraining.
+- Real and simulated audio differ measurably in acoustics, vocabulary and phraseology (Section 4), so results must be reported per source.
+
+**Exploratory observations** (small samples, single runs, or correlational evidence; treat as hypotheses):
+
+- The Research Question 3 correlations and the claim that operationally dense transmissions are "easier" are correlational, rely on heuristic features (the SNR proxy is a dynamic-range measure, not a physical SNR) and on LLM-derived entity counts, and entity count largely stands in for utterance length and context.
+- The benefit of rare-label balancing for NER (per-label deltas on 10-96 spans; Section 5.10).
+- The prototype results on 100 utterances (Sections 5.3-5.7) and the hallucination taxonomy (Section 5.5), which is built from worst-case examples and is illustrative rather than a prevalence estimate.
+- The expected gain from training the LoRA model longer (Section 5.8), which is a hypothesis that was not tested.
+- The usefulness of ClearanceIQ's clearance card, Claude explanations and Kokoro voice read-back: none has been evaluated with aviation users, and the voice read-back has not been run with the real model weights.
+
+## 7.3 Limitations
+
+**Accent and dataset representativeness.** Neither corpus is a representative sample of global ATC communication, and neither provides speaker, accent, gender, airport or role metadata, so performance could not be broken down by any of them.
+
+- The real-audio data comes from two sources: the UWB ATC Corpus (Czech-airspace ATC audio with heavily accented English) and the ATCO2 1-hour test subset. That is about 7.4 hours of audio, and only 813 real-audio test utterances. The 7.5% real-audio WER is an estimate for these corpora and recording conditions, not a population-wide accuracy figure; accents, airspaces, radio equipment and phraseology conventions that are not represented here may behave very differently.
+- The larger simulated corpus (ATCOSIM, 58.5% of audio hours) is clean, full-bandwidth speech by controllers in a simulation setting. It supplies the majority of the training and test volume, so the aggregate WER (3.8%) flatters the models; the real-audio figure is the operationally meaningful one.
+- Both corpora are English only, and neither labels the speaker's role, so controller and pilot speech cannot be evaluated separately. The effect of a speaker's accent on errors is therefore untested: it is an open risk, not a measured result.
+
+**ASR-to-NLP error propagation.** The NER models are trained and scored on *reference* transcripts, but in the application they receive *ASR output*, so recognition errors flow directly into entity extraction.
+
+- Entities amplify word errors: a 7.5% real-audio WER corresponds to an entity F1 of 0.856 on the same audio (Section 5.8), because one wrong word breaks a whole entity (the evaluation requires identical label and text). Where the errors fall matters as much as how many there are: the off-the-shelf ATC model's real-audio WER (9.1%) is close to the selected model's, yet its callsign recall is 0.557 against 0.886.
+- The NER model does not detect ASR errors. A misrecognized digit ("five thousand" heard as "six thousand") still produces a well-formed ALTITUDE entity, and the clearance card, the Claude explanation and the Kokoro read-back all repeat it faithfully. Because the reference entities in Section 5.8 were produced by the same NER model, a systematic NER error would not be visible in that evaluation.
+- The students were not trained on noisy ASR hypotheses, and nothing in the pipeline propagates ASR uncertainty (for example word confidence) to the entity stage.
+
+**Other disclosed limitations.**
+
+- The off-the-shelf comparison model's real-audio numbers carry an unverified train/test-overlap risk (Section 5.2), and the project's simulated-audio numbers are not a fair generalization test against it for the mirror-image reason (ATCOSIM was in their training data but never in the comparison model's).
+- Each model was trained once; run-to-run variation (a few tenths of a point, Section 5.4) is not in the confidence intervals.
+- The NER evaluation sets are small (95-100 utterances) and partly agreed-by-annotators rather than individually reviewed; students inherit the teacher's label noise; and 4,865 flagged utterances are unreviewed and excluded from training.
+- Speed restrictions, which the proposal listed, are not a label in the final nine-category scheme, and the "request" verb is not yet decided as a COMMAND.
+- The scoring normalizer does not reconcile "nine" with "niner" or decompose alphanumeric callsigns.
+- Latency was measured on one high-end laptop CPU; transcripts longer than 30 s need chunking.
+
+**Operational use.** ClearanceIQ is an academic research prototype. **It has not been validated, certified or tested with controllers or pilots, and it is not intended for operational use.** It must not be used for air traffic control, flight planning, clearance confirmation or any safety-related decision. It does not confirm clearances, detect conflicts or raise safety alerts, and it works on recorded clips, not live radio.
+
+## 7.4 Future Research
+
+1. **Evaluate ClearanceIQ with aviation users (Section 6).** Measure usefulness and failure modes with controllers or pilots. Resolve the open design questions: voice-activity splitting of long recordings, and raw against cleaned transcript display. For the Kokoro read-back: benchmark latency, RTF and memory on the CPU target, listen to ATC phraseology (digits, "niner/tree/fife", callsigns, fix names), add a pronunciation map if needed, and decide whether to keep it.
+2. **Measure accent and speaker effects.** Obtain or annotate speaker, accent and airport metadata, add recordings from other airspaces, and report WER and entity recall by group.
+3. **Reduce ASR-to-NLP error propagation.** Train or fine-tune the NER students on ASR hypotheses (or with synthetic ASR noise), pass word confidence to the entity stage, and flag low-confidence entities such as digits and callsigns for manual review.
+4. **Train the LoRA model for about 8 epochs (hypothesis, not yet tested).** Its validation WER was still falling at epoch 3 (8.5%, 5.7%, 4.3%), unlike the small model, which plateaued by epochs 4-6. The LoRA learning rate (5e-4) was a single untuned choice and the run would cost about 10 GPU-hours, so a learning-rate comparison and a higher rank are natural companions.
+5. **Human review of the 4,865 flagged NER utterances**, rare labels first, then retrain the students on the larger human-verified set; add a speed-restriction label.
+6. **Add a generation-time mitigation for repetition-loop hallucination** (Section 5.5) and **fine-tune with 6-8 s encoder windows** so the window floor drops below 10 s; benchmark on the real target devices, including 2-thread configurations.
+7. **Explore speech arousal ("sentiment") as a correlate of recognition errors.** The question is whether a more excited or stressed transmission is harder to transcribe. Text sentiment is unsuitable because ATC phraseology is almost uniformly neutral, so the analysis would use the audio: prosodic features (pitch variability, loudness peaks, speech rate) and optionally a pretrained speech-emotion arousal model, correlated with per-utterance WER and the SNR proxy (Section 5.8) and, if useful, surfaced as an indicator in ClearanceIQ. Neither corpus has emotion labels, so any result would be exploratory, and it would have to control for clip length and SNR and account for pitch tracking degrading on narrowband radio audio.
 
 ---
 
-# References
+# 8. References
+
+Anthropic. (n.d.). *Claude* [Large language model]. https://www.anthropic.com/claude
 
 ATCO2 Project. (n.d.). *ATCO2: Automatic collection and processing of voice data from air-traffic communications*. https://www.atco2.org/
 
+Hexgrad. (2025). *Kokoro-82M* [Model]. Hugging Face. https://huggingface.co/hexgrad/Kokoro-82M
+
 Hofbauer, K., Petrik, S., & Hering, H. (2008). The ATCOSIM corpus of non-prompted clean air traffic control speech. In *Proceedings of the Sixth International Conference on Language Resources and Evaluation (LREC'08)*. European Language Resources Association.
 
-jacktol. (n.d.). *ATC-ASR-Dataset* [Data set]. Hugging Face. https://huggingface.co/datasets/jacktol/ATC-ASR-Dataset
-
-jacktol. (n.d.). *whisper-medium.en-fine-tuned-for-ATC* [Model]. Hugging Face. https://huggingface.co/jacktol/whisper-medium.en-fine-tuned-for-ATC
+Honnibal, M., Montani, I., Van Landeghem, S., & Boyd, A. (2020). *spaCy: Industrial-strength natural language processing in Python* [Computer software]. https://spacy.io/
 
 Hu, E. J., Shen, Y., Wallis, P., Allen-Zhu, Z., Li, Y., Wang, S., Wang, L., & Chen, W. (2021). *LoRA: Low-rank adaptation of large language models* (arXiv:2106.09685). arXiv. https://arxiv.org/abs/2106.09685
+
+jacktol. (n.d.-a). *ATC-ASR-Dataset* [Data set]. Hugging Face. https://huggingface.co/datasets/jacktol/ATC-ASR-Dataset
+
+jacktol. (n.d.-b). *whisper-medium.en-fine-tuned-for-ATC* [Model]. Hugging Face. https://huggingface.co/jacktol/whisper-medium.en-fine-tuned-for-ATC
+
+Jitsi. (n.d.). *jiwer: Evaluate your speech-to-text transcriptions* [Computer software]. GitHub. https://github.com/jitsi/jiwer
+
+jlvdoorn. (n.d.-a). *atco2-asr* [Data set]. Hugging Face. https://huggingface.co/datasets/jlvdoorn/atco2-asr
+
+jlvdoorn. (n.d.-b). *atcosim* [Data set]. Hugging Face. https://huggingface.co/datasets/jlvdoorn/atcosim
 
 Klein, G., Hernandez, F., Nguyen, V., & Senellart, J. (2020). The OpenNMT neural machine translation toolkit: 2020 edition. In *Proceedings of the 14th Conference of the Association for Machine Translation in the Americas (AMTA 2020)*. (CTranslate2.)
 
 Kwon, W., Li, Z., Zhuang, S., Sheng, Y., Zheng, L., Yu, C. H., Gonzalez, J. E., Zhang, H., & Stoica, I. (2023). Efficient memory management for large language model serving with PagedAttention. In *Proceedings of the 29th ACM Symposium on Operating Systems Principles*. (vLLM.)
 
-Honnibal, M., Montani, I., Van Landeghem, S., & Boyd, A. (2020). *spaCy: Industrial-strength natural language processing in Python* [Computer software]. https://spacy.io/
+Lhoest, Q., Villanova del Moral, A., Jernite, Y., Thakur, A., von Platen, P., Patil, S., Chaumond, J., Drame, M., Plu, J., Tunstall, L., Davison, J., Šaško, M., Chhablani, G., Malik, B., Brandeis, S., Le Scao, T., Sanh, V., Xu, C., Patry, N., … Wolf, T. (2021). *Datasets: A community library for natural language processing* (arXiv:2109.02902). arXiv. https://arxiv.org/abs/2109.02902
 
 Mangrulkar, S., Gugger, S., Debut, L., Belkada, Y., Paul, S., & Bossan, B. (2022). *PEFT: State-of-the-art parameter-efficient fine-tuning methods* [Computer software]. https://github.com/huggingface/peft
-
-Jitsi. (n.d.). *jiwer: Evaluate your speech-to-text transcriptions* [Computer software]. GitHub. https://github.com/jitsi/jiwer
-
-jlvdoorn. (n.d.). *atco2-asr* [Data set]. Hugging Face. https://huggingface.co/datasets/jlvdoorn/atco2-asr
-
-jlvdoorn. (n.d.). *atcosim* [Data set]. Hugging Face. https://huggingface.co/datasets/jlvdoorn/atcosim
-
-Lhoest, Q., Villanova del Moral, A., Jernite, Y., Thakur, A., von Platen, P., Patil, S., Chaumond, J., Drame, M., Plu, J., Tunstall, L., Davison, J., Šaško, M., Chhablani, G., Malik, B., Brandeis, S., Le Scao, T., Sanh, V., Xu, C., Patry, N., … Wolf, T. (2021). *Datasets: A community library for natural language processing* (arXiv:2109.02902). arXiv. https://arxiv.org/abs/2109.02902
 
 McFee, B., Raffel, C., Liang, D., Ellis, D. P. W., McVicar, M., Battenberg, E., & Nieto, O. (2015). librosa: Audio and music signal analysis in Python. In K. Huff & J. Bergstra (Eds.), *Proceedings of the 14th Python in Science Conference* (pp. 18–24).
 
 metawhisp. (n.d.). *Whisper repeating word loop fix*. https://metawhisp.com/blog/whisper-repeating-word-loop-fix/
 
+Qwen Team. (n.d.). *Qwen3.5* [Large language model]. Hugging Face. https://huggingface.co/Qwen
+
 Radford, A., Kim, J. W., Xu, T., Brockman, G., McLeavey, C., & Sutskever, I. (2022). *Robust speech recognition via large-scale weak supervision* (arXiv:2212.04356). arXiv. https://arxiv.org/abs/2212.04356
+
+Streamlit Inc. (n.d.). *Streamlit* [Computer software]. https://streamlit.io/
 
 University of West Bohemia. (n.d.). *UWB ATC Corpus* [Data set]. LINDAT/CLARIAH-CZ Repository. https://lindat.mff.cuni.cz/repository/xmlui/handle/11858/00-097C-0000-0001-CCA1-0
 

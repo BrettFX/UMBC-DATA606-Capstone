@@ -9,7 +9,7 @@ nothing meaningful to collapse or rewrite beyond that.
 
 `count_numeric_tokens`, `count_command_verbs`, and
 `count_callsign_like_sequences` are lightweight regex/vocabulary proxies
-standing in for the deferred, ground-truth NER work -- not real entity
+standing in for ground-truth NER (see `src/ner`) -- not real entity
 extraction. Treat their outputs as rough, comparative signals (e.g. "source
 X has more numeric-heavy transcripts than source Y"), not exact counts.
 """
