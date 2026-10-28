@@ -82,8 +82,12 @@ def readback(result: Result) -> None:
 def audio_tab(audio: PreparedAudio, result: Result) -> None:
     st.caption("Press play on the audio player: the line follows playback in both charts. Click a chart to jump to that moment.")
     cfg = {"displayModeBar": False}
-    st.plotly_chart(viz.waveform_fig(audio.samples, audio.sr, audio.trim_start_s), use_container_width=True, config=cfg)
-    st.plotly_chart(viz.mel_fig(audio.samples, audio.sr, audio.trim_start_s), use_container_width=True, config=cfg)
+    spans = [(seg.start_s, seg.end_s) for seg in audio.segments]
+    if len(spans) > 1:
+        st.caption(f"The recording was split at pauses into {len(spans)} segments of at most {config.MAX_SEGMENT_S:.0f} s, each transcribed separately. "
+                   "Shaded bands and dotted lines mark them (S1, S2, ...).")
+    st.plotly_chart(viz.waveform_fig(audio.samples, audio.sr, audio.trim_start_s, spans=spans), use_container_width=True, config=cfg)
+    st.plotly_chart(viz.mel_fig(audio.samples, audio.sr, audio.trim_start_s, spans=spans), use_container_width=True, config=cfg)
     wpm = metrics.speech_rate_wpm(result.transcript, audio.duration_s)
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Duration", f"{audio.duration_s:.1f} s")

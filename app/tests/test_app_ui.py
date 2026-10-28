@@ -63,3 +63,41 @@ def test_voice_readback_is_enabled_when_kokoro_is_installed(monkeypatch):
     exp = _readback_expander(at)
     assert not list(exp.warning)
     assert not any(b.disabled for b in exp.button)
+
+
+# ---- multi-segment clips: bounded transcript box and segment bands on the charts ----
+
+def _result(n_segments):
+    from types import SimpleNamespace as NS
+    segs = [NS(start_s=i * 10.0, end_s=(i + 1) * 10.0, text="descend flight level eight zero", entities=[],
+               words=[NS(start=i * 10.0 + k * 0.5, end=i * 10.0 + k * 0.5 + 0.4) for k in range(5)]) for i in range(n_segments)]
+    return NS(segments=segs, transcript=" ".join(s.text for s in segs))
+
+
+def test_transcript_box_scrolls_inside_a_height_cap_and_names_segments():
+    from app.ui import live_transcript
+
+    html = live_transcript.build_html(_result(8))
+    assert "max-height" in html and "overflow-y:auto" in html and "position:sticky" in html
+    assert html.count("class='ciq-seg'") == 8 and "<span class='ciq-now'>" in html  # a 'Segment k of n' slot for the playing segment
+
+
+def test_single_segment_transcript_has_no_segment_labels():
+    from app.ui import live_transcript
+
+    html = live_transcript.build_html(_result(1))
+    assert "class='ciq-seg'" not in html and "<span class='ciq-now'>" not in html
+
+
+def test_segment_bands_only_for_multi_segment_audio():
+    import numpy as np
+    from app.ui import viz
+
+    y = np.random.default_rng(0).uniform(-0.3, 0.3, 16000 * 3).astype("float32")
+    assert not viz.waveform_fig(y, 16000).layout.shapes and not viz.waveform_fig(y, 16000, spans=[(0, 3)]).layout.shapes
+    spans = [(0.0, 1.0), (1.0, 2.0), (2.0, 3.0)]
+    fig = viz.waveform_fig(y, 16000, t0=0.5, spans=spans)
+    xs = sorted(round(s.x0, 2) for s in fig.layout.shapes)
+    assert xs == [1.5, 1.5, 2.5]  # shaded band 2 starts at 1.5 and the cuts (dotted lines) at 1.5 and 2.5, shifted by t0
+    assert [a.text for a in fig.layout.annotations] == ["S1", "S2", "S3"]
+    assert len(viz.mel_fig(y, 16000, spans=spans).layout.annotations) == 3

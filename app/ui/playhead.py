@@ -51,6 +51,28 @@ _JS = """
     return line;
   }
 
+  // Keep the spoken word visible inside the (height-capped) transcript box without scrolling the page, and say which segment it is in.
+  function follow(el) {
+    const box = el.closest('.ciq-live');
+    if (!box) return;
+    const now = box.querySelector('.ciq-now'), segs = box.querySelectorAll('.ciq-seg');
+    if (now && segs.length > 1) {
+      let p = el.previousElementSibling;
+      while (p && !p.classList.contains('ciq-seg')) p = p.previousElementSibling;
+      if (p) now.textContent = p.textContent + ' of ' + segs.length;
+    }
+    if (box.scrollHeight <= box.clientHeight + 2) return;
+    if (!box.__ciqHold0) {                    // a manual scroll pauses the auto-follow for a few seconds
+      box.__ciqHold0 = true;
+      ['wheel', 'touchmove'].forEach((ev) => box.addEventListener(ev, () => { box.__ciqHold = Date.now() + 4000; }, { passive: true }));
+    }
+    if (Date.now() < (box.__ciqHold || 0)) return;
+    const top = el.offsetTop, bottom = top + el.offsetHeight;
+    if (top < box.scrollTop + 44 || bottom > box.scrollTop + box.clientHeight - 12) {
+      box.scrollTo({ top: Math.max(top - box.clientHeight / 3, 0), behavior: 'smooth' });
+    }
+  }
+
   let words = [], wordsKey = '';
   function updateWords(a) {
     const nodes = document.querySelectorAll('.ciq-w[data-s]');
@@ -69,7 +91,7 @@ _JS = """
     for (const el of words) {
       const on = playing && t >= el._s && t < Math.max(el._e, el._s + 0.12);
       const done = playing && !on && t >= el._e;
-      if (on !== el._on) { el.classList.toggle('on', on); el._on = on; }
+      if (on !== el._on) { el.classList.toggle('on', on); el._on = on; if (on) follow(el); }
       if (done !== el._done) { el.classList.toggle('done', done); el._done = done; }
     }
   }
