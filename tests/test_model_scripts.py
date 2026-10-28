@@ -127,3 +127,53 @@ def test_check_access_reports_why_s3_is_unusable():
     assert "cannot reach" in artifacts.check_access(_Client(_err("EndpointConnectionError")), base)
     assert "no models found" in artifacts.check_access(_Client(count=0), base)
     assert artifacts.check_access(_Client(), "not-an-s3-uri")  # a bad URI is reported, never raised
+
+
+# ---- setup.sh: Jupyter kernel registration must survive a broken pyzmq/ipykernel (a stub conda records the calls) ----
+
+CONDA_STUB = """#!/usr/bin/env bash
+echo "$*" >> "$STUB_LOG"
+case "$*" in
+  *"import zmq"*) [ -e "$STUB_FIXED" ] || [ "$STUB_BROKEN" != 1 ] ;;
+  *"pip uninstall"*) exit 0 ;;
+  install*) [ "$STUB_REPAIR" = ok ] && touch "$STUB_FIXED"; [ "$STUB_REPAIR" = ok ] ;;
+  *"ipykernel install"*) [ "$STUB_KERNEL" = ok ] && echo "Installed kernelspec" ;;
+esac
+"""
+
+
+def register(tmp_path, broken=False, repair="ok", kernel="ok"):
+    bindir = tmp_path / "bin"
+    bindir.mkdir(exist_ok=True)
+    (bindir / "conda").write_text(CONDA_STUB)
+    (bindir / "conda").chmod(0o755)
+    log = tmp_path / "calls.log"
+    log.write_text("")
+    env = {"PATH": f"{bindir}:/usr/bin:/bin", "STUB_LOG": str(log), "STUB_FIXED": str(tmp_path / "fixed"), "STUB_BROKEN": "1" if broken else "0",
+           "STUB_REPAIR": repair, "STUB_KERNEL": kernel}
+    r = subprocess.run(["bash", "-c", "source scripts/lib/jupyter_env.sh; register_jupyter_kernel data-science"], cwd=ROOT, env=env,
+                       capture_output=True, text=True)
+    return r, log.read_text()
+
+
+def test_kernel_registration_is_plain_when_the_env_is_healthy(tmp_path):
+    r, calls = register(tmp_path)
+    assert r.returncode == 0 and "pip uninstall" not in calls and "install --user" in calls
+
+
+def test_a_broken_pyzmq_is_repaired_then_the_kernel_is_registered(tmp_path):
+    """Re-running setup.sh left pip's and conda's pyzmq/ipykernel mixed: `import zmq` fails until they are reinstalled cleanly."""
+    r, calls = register(tmp_path, broken=True)
+    assert r.returncode == 0 and "Repairing" in r.stdout
+    order = [calls.index(s) for s in ("pip uninstall", "install -y -q -n data-science", "ipykernel install")]
+    assert order == sorted(order)  # uninstall pip's copy, reinstall via conda, then register
+
+
+def test_an_unrepairable_env_only_warns(tmp_path):
+    r, calls = register(tmp_path, broken=True, repair="fail")
+    assert r.returncode == 1 and "WARNING: could not register" in r.stderr and "ipykernel install" not in calls
+
+
+def test_a_failing_kernel_install_only_warns(tmp_path):
+    r, _ = register(tmp_path, kernel="fail")
+    assert r.returncode == 1 and "WARNING: could not register" in r.stderr

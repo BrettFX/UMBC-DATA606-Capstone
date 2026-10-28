@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Creates (or updates) the conda environment defined in environment.yml and
 # registers it as a Jupyter kernel. Also installs system packages the app needs (espeak-ng).
+# Safe to re-run: an existing environment is updated (never pruned), a broken pyzmq/ipykernel (left by an earlier pip install) is repaired,
+# and failing to register the Jupyter kernel only warns, since the app does not need it.
 #
 # Usage:
 #   ./setup.sh
@@ -39,19 +41,24 @@ ensure_system_deps() {
 }
 ensure_system_deps
 
-# `conda env create` fails (or prompts to overwrite) when the env already exists,
-# so update in place instead; --prune drops packages no longer in the file.
+# `conda env create` fails (or prompts to overwrite) when the env already exists, so update in place instead.
+# No --prune on purpose: the env may be an existing one that holds other work (CUDA toolkit, Qt, lxml, ...), and --prune
+# silently uninstalls every conda package that environment.yml does not list. The cost is that packages dropped from
+# environment.yml linger; to clean those up, remove the env (`conda env remove -n <name>`) and re-run this script.
 if conda env list | awk '{print $1}' | grep -qx "$CONDA_ENV_NAME"; then
     echo "Environment '$CONDA_ENV_NAME' exists; updating..."
-    conda env update -n "$CONDA_ENV_NAME" -f "$REPO_ROOT/environment.yml" --prune
+    conda env update -n "$CONDA_ENV_NAME" -f "$REPO_ROOT/environment.yml"
 else
     echo "Creating environment '$CONDA_ENV_NAME'..."
     conda env create -f "$REPO_ROOT/environment.yml"
 fi
 
 # Register the env as a Jupyter kernel whose display name matches the notebooks'
-# kernelspec, so it shows up in Jupyter/VS Code without manual setup.
-conda run -n "$CONDA_ENV_NAME" python -m ipykernel install --user \
-    --name "$CONDA_ENV_NAME" --display-name "$CONDA_ENV_NAME"
+# kernelspec, so it shows up in Jupyter/VS Code without manual setup. Optional for the app, so a failure only warns.
+# shellcheck source=scripts/lib/jupyter_env.sh
+source "$REPO_ROOT/scripts/lib/jupyter_env.sh"
+kernel_ok=1
+register_jupyter_kernel "$CONDA_ENV_NAME" || kernel_ok=0
 
 echo "Done. Activate with: conda activate $CONDA_ENV_NAME"
+[[ "$kernel_ok" -eq 1 ]] || echo "(The Jupyter kernel was not registered; see the warning above.)"
