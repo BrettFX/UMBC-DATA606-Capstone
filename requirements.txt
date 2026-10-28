@@ -16,6 +16,7 @@ torch==2.7.1  # NOTE: a plain install from this file pulls PyPI's default-CUDA w
               # ones; torch 2.5.1+cu124 fails there with "no kernel image is available for execution".
 torchvision==0.22.1  # must match torch==2.7.1 (a mismatched torchvision fails with "operator torchvision::nms does not exist");
                      # install from the same +cu128 index: `pip install torchvision==0.22.1 --index-url https://download.pytorch.org/whl/cu128 --no-deps`
+pillow==12.2.0  # torchvision (installed --no-deps) imports PIL at load time; transformers' lazy imports trigger it when streamlit's file watcher scans modules
 accelerate==1.15.0 # must stay new enough for transformers>=4.57's Trainer (older accelerate
                     # lacks Accelerator.unwrap_model's `keep_torch_compile` kwarg it now passes)
 jiwer==3.1.0
