@@ -785,7 +785,7 @@ The trained models are integrated into **ClearanceIQ** (`app/`, run with `./run-
 ## 6.2 Interface
 
 - **Live transcript.** Under the audio player, the word being spoken is highlighted during playback and clicking a word seeks the player to it. The playhead is synchronized across the waveform and the Mel spectrogram. For clips split into several segments, the transcript box has a fixed maximum height and scrolls to follow the spoken word (the header names the playing segment, "Segment 3 of 12"), so the charts stay within reach, and the charts mark the segments with labeled bands and dotted cut lines.
-- **Transcript & entities tab.** A clearance card grouping entities by type, the displaCy entity-highlighted transcript, a color legend, a copyable plain transcript, and timing metrics (transcription time, entity time).
+- **Transcript & entities tab.** A clearance card grouping entities by type, the displaCy entity-highlighted transcript (for clips split into several segments, one card per segment and one transcript, each in a fixed-height box that scrolls), a color legend, a copyable plain transcript, and timing metrics (transcription time, entity time).
 - **Evidence tab.** On labeled samples, WER, CER, entity precision/recall/F1 and a word-level diff against the ground truth, with a note when a clip comes from the training or validation split (so its score is a demo rather than an evaluation).
 - **Models tab.** Hugging Face-style model cards for the ASR model and both NER variants (data, scores from Sections 5.8 and 5.10, limitations), and a side-by-side NER comparison.
 - **Audio analysis tab.** Waveform, Mel spectrogram, duration, speech rate and the estimated SNR, using the same acoustic features as the EDA (Section 4).

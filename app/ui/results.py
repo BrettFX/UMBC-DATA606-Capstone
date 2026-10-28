@@ -26,14 +26,21 @@ def transcript_tab(result: Result) -> None:
     c3.metric("Transcription time", f"{result.asr_seconds:.1f} s")
     c4.metric("Entity time", f"{result.ner_seconds * 1000:.0f} ms")
     present = {e["label"] for e in result.entities}
-    st.subheader("Clearance")
-    clearance_card.render_card(result.entities)
-    st.subheader("Highlighted transcript")
     multi = len(result.segments) > 1
-    for i, seg in enumerate(result.segments, 1):
-        if multi:
-            st.caption(f"Segment {i} · {seg.start_s:.1f}–{seg.end_s:.1f} s")
-        if seg.text:
+    if multi:
+        st.caption(f"This clip was split into {len(result.segments)} segments, each shown separately. "
+                   "Scroll inside the Clearance and transcript boxes to move between them.")
+    st.subheader("Clearance")
+    if multi:  # per-segment cards in a scrolling box: separate transmissions stay separate and the tab keeps a bounded height
+        clearance_card.render_segment_cards(result.segments)
+    else:
+        clearance_card.render_card(result.entities)
+    st.subheader("Highlighted transcript")
+    if multi:
+        clearance_card.render_segments_displacy(result.segments)
+    else:
+        seg = result.segments[0] if result.segments else None
+        if seg and seg.text:
             clearance_card.render_displacy(seg.text, seg.entities)
         else:
             st.caption("(no speech recognized)")

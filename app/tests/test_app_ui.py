@@ -101,3 +101,30 @@ def test_segment_bands_only_for_multi_segment_audio():
     assert xs == [1.5, 1.5, 2.5]  # shaded band 2 starts at 1.5 and the cuts (dotted lines) at 1.5 and 2.5, shifted by t0
     assert [a.text for a in fig.layout.annotations] == ["S1", "S2", "S3"]
     assert len(viz.mel_fig(y, 16000, spans=spans).layout.annotations) == 3
+
+
+# ---- Transcript & entities tab for multi-segment clips ----
+
+def _segments(n):
+    from types import SimpleNamespace as NS
+    text = "lufthansa four three nine zero descend flight level eight zero"
+    ents = [{"text": "lufthansa four three nine zero", "label": "CALLSIGN", "span": [0, 30]},
+            {"text": "descend", "label": "COMMAND", "span": [31, 38]}]
+    return [NS(start_s=i * 10.0, end_s=(i + 1) * 10.0, text=text, entities=ents if i % 2 == 0 else []) for i in range(n)]
+
+
+def test_multi_segment_clearance_cards_are_per_segment_in_a_scrolling_box():
+    from app.ui import clearance_card
+
+    html = clearance_card.segment_cards_html(_segments(6))
+    assert "max-height:22rem" in html and "overflow-y:auto" in html
+    assert html.count("Segment ") == 6 and html.count("AIRCRAFT") == 3  # only segments with entities get a card
+    assert "No aviation entities in this segment." in html
+
+
+def test_multi_segment_highlighted_transcript_is_one_bounded_document():
+    from app.ui import clearance_card
+
+    html = clearance_card.segments_displacy_html(_segments(12))
+    assert html.count("class='seg'") == 12 and html.count("<html>") == 1
+    assert clearance_card.MAX_MULTI_HEIGHT <= 400  # the iframe height is capped; the content scrolls inside it
