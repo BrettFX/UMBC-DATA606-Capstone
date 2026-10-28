@@ -184,6 +184,34 @@ def unchanged_vs_latest(client, latest_uri: str, manifest: dict) -> str | None:
     return remote.get("run_id") if same else None
 
 
+def check_access(client, base_uri: str) -> str | None:
+    """Can these AWS credentials read the model store? None if yes, else a short human-readable reason.
+
+    Having credentials is not enough: a different AWS account, an expired SSO login or no network all fail here, so
+    callers can fall back to another source before starting a download. Never raises.
+    """
+    try:
+        bucket, prefix = split_s3_uri(base_uri)
+        resp = client.list_objects_v2(Bucket=bucket, Prefix=prefix + "/" if prefix else "", MaxKeys=1)
+    except Exception as e:  # noqa: BLE001 -- any failure means "not usable"; botocore has many exception types
+        name = type(e).__name__
+        code = getattr(e, "response", {}).get("Error", {}).get("Code", "")
+        if name == "NoCredentialsError":
+            return "no AWS credentials found"
+        if name in ("TokenRetrievalError", "SSOTokenLoadError", "UnauthorizedSSOTokenError") or code in ("ExpiredToken", "ExpiredTokenException", "InvalidToken"):
+            return "AWS login expired (run `aws sso login`)"
+        if code in ("AccessDenied", "403", "AllAccessDisabled", "InvalidAccessKeyId", "SignatureDoesNotMatch"):
+            return "these AWS credentials cannot read the models bucket (different AWS account?)"
+        if code in ("NoSuchBucket", "404"):
+            return "the models bucket was not found for these credentials"
+        if "Connect" in name or "Endpoint" in name or "Timeout" in name:
+            return "cannot reach AWS"
+        return f"{name}: {e}"[:160]
+    if not resp.get("KeyCount"):
+        return f"no models found under {base_uri}"
+    return None
+
+
 def model_prefix(base: str, task: str, model_name: str) -> str:
     """`s3://bucket/ml-tasks` + task + model name -> the S3 URI that holds this model's runs and `latest/`."""
     return f"{base.rstrip('/')}/{task}/{model_name}"

@@ -71,7 +71,7 @@ credentials (environment or `~/.aws`) and are safe to re-run.
 **No S3 access? Run the app from a Google Drive bundle.** `./download-models.sh` (default `--source auto`) falls back to a
 single zip, `clearanceiq-models.zip` (~0.7 GB: the CTranslate2 ASR model and both spaCy NER models, everything the Streamlit
 app loads), in a public view-only [Drive folder](https://drive.google.com/drive/folders/1F4tGwPjIgFPdo3ZClRX5-y3gFGThBWZ1)
-when no AWS credentials are found; force it with `--source gdrive`. The zip is checked against `app-models.sha256`
+whenever S3 can't be used (no AWS credentials, credentials for a different AWS account, an expired SSO login, no network or no `boto3`) or a download fails part-way, with no error shown. Force Drive with `--source gdrive`; `--source s3` never falls back, and an error appears only then or when every method fails. The zip is checked against `app-models.sha256`
 (committed here) before extraction, and you can also download it by hand and run
 `python scripts/app_bundle.py fetch --zip <file>`. The bundle does not include what the notebooks and training need
 (full-precision model, results CSVs, NER data). Maintainers rebuild it with `./package-app-models.sh`,
