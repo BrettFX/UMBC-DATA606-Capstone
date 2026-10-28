@@ -51,25 +51,31 @@ def transcript_tab(result: Result) -> None:
 
 
 def readback(result: Result) -> None:
-    """Experimental: speak the transcript back with Kokoro TTS (post-process after ASR)."""
-    if not result.transcript or not speech.is_available():
+    """Experimental: speak the transcript back with Kokoro TTS (post-process after ASR).
+
+    Always shown once there is a transcript; when Kokoro is not installed the controls are disabled and a message says how to fix it.
+    """
+    if not result.transcript:
         return
+    available = speech.is_available()
     with st.expander("Voice read-back (experimental)"):
+        if not available:
+            st.warning(speech.unavailable_message())
         st.caption("Synthesizes the recognized transcript with Kokoro-82M so you can hear what the model understood. "
                    "This is a text-to-speech step applied after recognition; it does not re-process the original audio.")
         c1, c2 = st.columns(2)
-        voice = config.TTS_VOICES[c1.selectbox("Voice", list(config.TTS_VOICES))]
-        speed = c2.slider("Speed", 0.7, 1.3, 1.0, 0.05)
+        voice = config.TTS_VOICES[c1.selectbox("Voice", list(config.TTS_VOICES), disabled=not available)]
+        speed = c2.slider("Speed", 0.7, 1.3, 1.0, 0.05, disabled=not available)
         key = (result.transcript, voice, speed)
         cache = st.session_state.setdefault("readbacks", {})
-        if st.button("Read back transcript") and key not in cache:
+        if st.button("Read back transcript", disabled=not available) and key not in cache:
             with st.spinner("Synthesizing…"):
                 try:
                     cache[key] = speech.synthesize(result.transcript, voice, speed)
                 except AppError as e:
                     show_error(e)
                     return
-        if key in cache:
+        if available and key in cache:
             st.audio(cache[key], format="audio/wav")
 
 
@@ -164,7 +170,7 @@ def about_tab() -> None:
 **How it works.** Audio is converted to mono 16 kHz, trimmed and (if longer than 28 s) split at pauses. A Whisper
 medium model fine-tuned on ATC speech transcribes it; a spaCy model tags callsigns, runways, altitudes, headings,
 frequencies, squawk codes, instructions, fixes and facilities. Optionally, Claude explains the result in plain English,
-and (if Kokoro is installed) the transcript can be read back in a synthesized voice.
+and an experimental voice read-back (needs Kokoro; see the panel on the Transcript & entities tab) speaks the transcript back.
 
 **What it is not.** It does not confirm clearances, detect conflicts, or raise safety alerts. Scores quoted here are
 research measurements on held-out datasets (ATCOSIM and ATC-ASR), not operational performance figures.

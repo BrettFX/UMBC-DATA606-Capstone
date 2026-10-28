@@ -21,7 +21,7 @@ Not certified or validated for operational use.
   only transcript text and entity tags are sent, and the key is kept in the browser session only
 
 - Experimental voice read-back of the transcript with [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M) text-to-speech, a post-process
-  after recognition. Installed by `./setup.sh` (`kokoro` from `requirements.txt` plus `espeak-ng` via apt); the panel is hidden if `kokoro` is missing
+  after recognition. Installed by `./setup.sh` (`kokoro` from `requirements.txt` plus `espeak-ng` via apt); if `kokoro` is missing the panel stays visible but disabled, with a message to run `./setup.sh` and use the right Python environment
 
 ## Run
 

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import io
 import re
+import sys
 import wave
 
 import numpy as np
@@ -24,6 +25,16 @@ def is_available() -> bool:
     except ImportError:
         return False
     return True
+
+
+def unavailable_message() -> str:
+    """Markdown shown in the UI when Kokoro cannot be imported: what is wrong and how to fix it."""
+    return (
+        "**Voice read-back is unavailable.** The Kokoro text-to-speech package could not be imported by the Python "
+        f"environment running this app (`{sys.executable}`).\n\n"
+        "1. Install the project dependencies by running `./setup.sh`; it installs Kokoro and the `espeak-ng` system package.\n"
+        "2. Restart the app from that environment: use `./run-app.sh`, or `conda activate data-science` and then "
+        "`streamlit run app/main.py`.")
 
 
 def prepare_text(transcript: str) -> str:
@@ -58,7 +69,7 @@ def synthesize(transcript: str, voice: str = config.DEFAULT_TTS_VOICE, speed: fl
         pipe = pipeline or _load_pipeline()
         chunks = [np.asarray(audio, dtype=np.float32) for _, _, audio in pipe(text, voice=voice, speed=speed) if audio is not None]
     except ImportError as exc:
-        raise AppError("Voice read-back is not installed.", 'Run pip install "kokoro>=0.9.4" (and install espeak-ng), then restart the app.') from exc
+        raise AppError("Voice read-back is not installed.", "Run ./setup.sh to install the project dependencies and restart the app from that environment.") from exc
     except Exception as exc:
         raise AppError("Voice read-back failed.", f"Technical detail: {type(exc).__name__}: {exc}") from exc
     if not chunks:

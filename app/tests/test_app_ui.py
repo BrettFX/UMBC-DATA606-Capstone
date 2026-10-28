@@ -32,3 +32,34 @@ def test_stale_session_objects_are_recomputed():
     at.run()
     assert not at.exception, at.exception
     assert any(m.label == "Entities" for m in at.metric)
+
+
+def _readback_expander(at):
+    return next(e for e in at.expander if e.label == "Voice read-back (experimental)")
+
+
+def test_voice_readback_is_shown_but_disabled_when_kokoro_is_missing(monkeypatch):
+    from app.services import speech
+
+    monkeypatch.setattr(speech, "is_available", lambda: False)
+    at = AppTest.from_file(MAIN, default_timeout=180)
+    at.session_state["entered"] = True
+    at.run()
+    assert not at.exception, at.exception
+    exp = _readback_expander(at)  # visible, not hidden
+    warning = " ".join(w.value for w in exp.warning)
+    assert "unavailable" in warning and "./setup.sh" in warning and "environment" in warning
+    assert all(b.disabled for b in exp.button) and exp.button
+    assert all(w.disabled for w in exp.selectbox) and all(w.disabled for w in exp.slider)
+
+
+def test_voice_readback_is_enabled_when_kokoro_is_installed(monkeypatch):
+    from app.services import speech
+
+    monkeypatch.setattr(speech, "is_available", lambda: True)
+    at = AppTest.from_file(MAIN, default_timeout=180)
+    at.session_state["entered"] = True
+    at.run()
+    exp = _readback_expander(at)
+    assert not list(exp.warning)
+    assert not any(b.disabled for b in exp.button)
