@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Creates (or updates) the conda environment defined in environment.yml and
-# registers it as a Jupyter kernel. Also installs system packages the app needs (espeak-ng).
+# registers it as a Jupyter kernel. Also installs system packages the app needs (espeak-ng, ffmpeg).
 # Safe to re-run: an existing environment is updated (never pruned), a broken pyzmq/ipykernel (left by an earlier pip install) is repaired,
 # and failing to register the Jupyter kernel only warns, since the app does not need it.
 #
@@ -19,25 +19,29 @@ if ! command -v conda >/dev/null 2>&1; then
     exit 1
 fi
 
-# System packages. Kokoro (voice read-back in the app) needs espeak-ng for phonemization fallback.
-# Installed via apt when missing; on other platforms we only warn, since the app works without it.
-ensure_system_deps() {
-    if command -v espeak-ng >/dev/null 2>&1; then
-        echo "espeak-ng found."
+# System packages the app uses: espeak-ng (Kokoro voice read-back) and ffmpeg (decoding m4a/mp3 uploads).
+# Installed via apt when missing; elsewhere, or if that fails, we only warn, since the app works without them.
+ensure_system_dep() {  # $1 = command, $2 = package name, $3 = what needs it
+    if command -v "$1" >/dev/null 2>&1; then
+        echo "$2 found."
         return
     fi
     if command -v apt-get >/dev/null 2>&1; then
-        echo "espeak-ng not found; installing via apt (may prompt for sudo)..."
+        echo "$2 not found; installing via apt (may prompt for sudo)..."
         local sudo=""
         [ "$(id -u)" -ne 0 ] && sudo="sudo"
-        if $sudo apt-get install -y espeak-ng; then
+        if $sudo apt-get install -y "$2"; then
             return
         fi
-        echo "WARNING: could not install espeak-ng; the app's voice read-back may not work." >&2
+        echo "WARNING: could not install $2; $3 may not work." >&2
     else
-        echo "WARNING: espeak-ng not found and apt-get is unavailable. Install it with your package manager" \
-             "(e.g. 'brew install espeak-ng') for the app's voice read-back." >&2
+        echo "WARNING: $2 not found and apt-get is unavailable. Install it with your package manager" \
+             "(e.g. 'brew install $2') for $3." >&2
     fi
+}
+ensure_system_deps() {
+    ensure_system_dep espeak-ng espeak-ng "the app's voice read-back"
+    ensure_system_dep ffmpeg ffmpeg "decoding m4a and mp3 uploads in the app"
 }
 ensure_system_deps
 

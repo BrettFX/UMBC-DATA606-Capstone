@@ -7,6 +7,9 @@ uploaded" and that contract happens here, and every change is recorded in `appli
 from __future__ import annotations
 
 import io
+import shutil
+import subprocess
+import tempfile
 from dataclasses import dataclass, field
 
 import librosa
@@ -56,9 +59,10 @@ def decode(data: bytes, filename: str = "") -> tuple[np.ndarray, int]:
         return y, int(sr)
     except Exception:
         pass
-    try:  # mp3/m4a and other formats libsndfile cannot read (needs ffmpeg/audioread)
-        import tempfile
-
+    y_sr = _decode_with_ffmpeg(data, ext)  # m4a (AAC) and other formats libsndfile cannot read
+    if y_sr is not None:
+        return y_sr
+    try:  # last resort: librosa, which only handles these formats if audioread and a backend are installed
         with tempfile.NamedTemporaryFile(suffix=f".{ext or 'bin'}") as f:
             f.write(data)
             f.flush()
@@ -66,8 +70,31 @@ def decode(data: bytes, filename: str = "") -> tuple[np.ndarray, int]:
         y = y[:, None] if y.ndim == 1 else y.T
         return y.astype(np.float32), int(sr)
     except Exception as exc:
-        raise AppError("The audio could not be decoded; the file may be corrupt or in an unsupported format.",
+        hint = ""
+        if ext in ("m4a", "mp3") and shutil.which("ffmpeg") is None:
+            hint = " This format needs ffmpeg: run ./setup.sh (or install ffmpeg) and restart the app."
+        raise AppError("The audio could not be decoded; the file may be corrupt or in an unsupported format." + hint,
                        f"Technical detail: {type(exc).__name__}") from exc
+
+
+def _decode_with_ffmpeg(data: bytes, ext: str) -> tuple[np.ndarray, int] | None:
+    """Decode with the ffmpeg command-line tool if it is installed; None if it is missing or cannot read the data."""
+    exe = shutil.which("ffmpeg")
+    if exe is None:
+        return None
+    with tempfile.TemporaryDirectory() as tmp:
+        src, dst = f"{tmp}/in.{ext or 'bin'}", f"{tmp}/out.wav"  # real files: an m4a's index may sit at the end, so no stdin pipe
+        with open(src, "wb") as f:
+            f.write(data)
+        try:
+            done = subprocess.run([exe, "-nostdin", "-v", "error", "-i", src, "-vn", "-acodec", "pcm_f32le", "-f", "wav", dst],
+                                  capture_output=True, timeout=120)
+            if done.returncode != 0:
+                return None
+            y, sr = sf.read(dst, dtype="float32", always_2d=True)
+        except (OSError, subprocess.SubprocessError, RuntimeError):
+            return None
+    return (y, int(sr)) if len(y) else None
 
 
 def estimate_snr_db(y: np.ndarray, sr: int) -> float | None:

@@ -1,4 +1,6 @@
 import io
+import shutil
+import subprocess
 
 import numpy as np
 import pytest
@@ -71,3 +73,21 @@ def test_too_long_rejected():
 def test_clipping_warning():
     y = np.clip(speechlike(2, amp=3.0), -1, 1)
     assert any("clipped" in w for w in audio_prep.prepare(wav(y), "a.wav").warnings)
+
+
+@pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg not installed")
+@pytest.mark.parametrize("ext,codec", [("m4a", "aac"), ("mp3", "libmp3lame"), ("ogg", "libvorbis")])
+def test_compressed_formats_decode_through_ffmpeg(tmp_path, ext, codec):
+    """m4a has no libsndfile support; before the ffmpeg fallback, uploads of it failed in a fresh environment."""
+    src, dst = tmp_path / "a.wav", tmp_path / f"a.{ext}"
+    src.write_bytes(wav(speechlike(2)))
+    subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(src), "-codec:a", codec, str(dst)], check=True)
+    y, sr = audio_prep.decode(dst.read_bytes(), dst.name)
+    assert abs(len(y) / sr - 2.0) < 0.2 and y.shape[1] == 1
+    assert audio_prep.prepare(dst.read_bytes(), dst.name).segments
+
+
+def test_m4a_error_points_to_ffmpeg_when_it_is_missing(monkeypatch):
+    monkeypatch.setattr(audio_prep.shutil, "which", lambda _name: None)
+    with pytest.raises(AppError, match="needs ffmpeg"):
+        audio_prep.decode(b"not really an m4a file", "voice.m4a")
