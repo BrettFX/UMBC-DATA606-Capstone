@@ -33,7 +33,7 @@ def wer_cer(reference: str, hypothesis: str) -> dict[str, float]:
 
 
 def word_diff(reference: str, hypothesis: str) -> list[tuple[str, str]]:
-    """[(op, word)] with op in {'=', '-', '+'} — reference words missing from / extra in the hypothesis."""
+    """[(op, word)] with op in {'=', '-', '+'}: reference words missing from / extra in the hypothesis."""
     import difflib
 
     ref, hyp = _norm(reference).split(), _norm(hypothesis).split()

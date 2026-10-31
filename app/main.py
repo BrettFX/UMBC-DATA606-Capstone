@@ -1,4 +1,4 @@
-"""ClearanceIQ — academic research prototype: ATC speech → transcript → aviation entities → plain-English explanation.
+"""ClearanceIQ: academic research prototype: ATC speech → transcript → aviation entities → plain-English explanation.
 
 Run from the repo root:  streamlit run app/main.py
 """

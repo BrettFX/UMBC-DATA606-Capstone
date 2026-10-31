@@ -50,7 +50,7 @@ def transcript_tab(result: Result) -> None:
     mi = result.info
     with st.expander("Model details"):
         st.markdown(
-            f"**Speech recognition:** {mi.asr_name} — {mi.asr_backend}  \n"
+            f"**Speech recognition:** {mi.asr_name} · {mi.asr_backend}  \n"
             f"**Model files:** `{mi.asr_source}`  \n"
             f"**Entity model:** {mi.ner_name} (`{mi.ner_dir}`)"
             + (f"  \n**Reported test WER:** {mi.asr_test_wer:.1%}" if mi.asr_test_wer is not None else "")
@@ -138,7 +138,7 @@ def evidence_tab(sample: Sample | None, result: Result) -> None:
         clearance_card.render_displacy(sample.ground_truth, sample.entities)
     with st.expander("How these scores are defined"):
         for k in ("WER", "CER", "Entity precision", "Entity recall", "Entity F1"):
-            st.markdown(f"**{k}** — {metrics.DEFINITIONS[k]}")
+            st.markdown(f"**{k}**: {metrics.DEFINITIONS[k]}")
         st.caption("Scores on one clip are anecdotal; see the model details for test-set results.")
 
 
