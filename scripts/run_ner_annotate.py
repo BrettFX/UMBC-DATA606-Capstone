@@ -10,7 +10,7 @@ or NER module source change, so labels from an older setup are never silently re
 vLLM pins its own torch, so this stage runs in a separate environment from the notebooks:
     ~/venvs/vllm/bin/python scripts/run_ner_annotate.py --dry-run
     ~/venvs/vllm/bin/python scripts/run_ner_annotate.py --limit 100      # smoke test
-    ~/venvs/vllm/bin/python scripts/run_ner_annotate.py                  # full run (9B, ~7 h on the dev GPU)
+    ~/venvs/vllm/bin/python scripts/run_ner_annotate.py                  # full run (9B, about 12.5 h on the dev GPU)
     ~/venvs/vllm/bin/python scripts/run_ner_annotate.py --preset 4b      # fast, lower accuracy
 """
 

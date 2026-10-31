@@ -35,7 +35,8 @@ The app needs the `data-science` conda env (`environment.yml`). Run it from the 
 ## Develop
 
 ```bash
-python -m pytest app/tests                        # unit, headless UI and Playwright browser tests (first: playwright install chromium)
+python -m pytest app/tests                        # unit and headless UI tests; the browser tests are skipped unless Playwright is installed
+pip install playwright && playwright install chromium   # optional: enables the browser tests in app/tests/e2e
 python scripts/build_app_samples.py               # rebuild the bundled sample clips from the datasets
 python scripts/capture_app_screenshots.py         # refresh the screenshots above
 ```

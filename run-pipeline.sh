@@ -118,7 +118,7 @@ run_data_ingest() {
 }
 
 # LLM NER annotation of the full corpus. Resumable: re-running continues from the cache, so it is safe to
-# interrupt. The 9B preset takes roughly 7 hours on the 8 GB dev GPU, so the default answer is no.
+# interrupt. The 9B preset takes roughly 12 hours on the 8 GB dev GPU, so the default answer is no.
 run_ner_annotation() {
     echo
     echo "--- Stage: NER Annotation (LLM) ---"
@@ -132,7 +132,7 @@ run_ner_annotation() {
     fi
 
     local preset limit dry=0
-    preset=$(prompt_value "Model preset (9b = accurate, ~7 h; 4b = fast, less accurate)" "9b")
+    preset=$(prompt_value "Model preset (9b = accurate, ~12 h; 4b = fast, less accurate)" "9b")
     limit=$(prompt_value "Max utterances to annotate this run (blank = all remaining)" "")
     prompt_yes_no "Dry run only (report pool size, cache state, time estimate)?" "y" && dry=1
 

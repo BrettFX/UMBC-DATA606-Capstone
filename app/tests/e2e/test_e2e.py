@@ -1,6 +1,8 @@
 """Browser end-to-end tests (Playwright). Starts the real Streamlit server on a free port.
 
 Run: python -m pytest app/tests/e2e -q      (screenshots land in app/tests/e2e/shots/)
+Needs Playwright, which is not part of the standard setup: pip install playwright && playwright install chromium.
+Without it this whole module is skipped.
 """
 
 from __future__ import annotations
@@ -14,7 +16,9 @@ import urllib.request
 from pathlib import Path
 
 import pytest
-from playwright.sync_api import expect, sync_playwright
+
+pytest.importorskip("playwright", reason="Playwright is not installed (pip install playwright && playwright install chromium)")
+from playwright.sync_api import expect, sync_playwright  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[3]
 SHOTS = Path(__file__).parent / "shots"
