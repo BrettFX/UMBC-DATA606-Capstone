@@ -25,6 +25,7 @@ env/
 data/raw/**
 data/processed/**
 data/samples/**
+data/proposal_eda/**
 !data/**/README.md
 !data/README.md
 
