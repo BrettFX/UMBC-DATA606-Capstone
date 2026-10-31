@@ -2,7 +2,7 @@
 
 **Data Scientist Principal**
 
-<img src="../res/brett-allen.jpg" alt="HeadshotPhoto" width="200">
+![Headshot photo of Brett Allen](../res/brett-allen-200.jpg)
 
 ## Summary of Experience
 
