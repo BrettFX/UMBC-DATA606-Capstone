@@ -37,96 +37,80 @@ def test_the_ct2_row_uploads_only_its_subfolder():
     assert rows["asr"][4] == "" and rows["ner"][4] == ""  # the other models upload their usual files
 
 
-# ---- download-models.sh: S3 -> Google Drive fallback (a stub python3 stands in for AWS and Drive) ----
+# ---- download-models.sh: Google Drive by default, the S3 experiment store only when asked (a stub python3 stands in for both) ----
 
 STUB = """#!/usr/bin/env bash
+echo "CALL $*" >> "$STUB_LOG"
 case "$*" in
-  *" probe"*) [ "$STUB_PROBE" = ok ] && exit 0; echo "these AWS credentials cannot read the models bucket"; exit 1 ;;
   *model_store.py*" download "*) [ "$STUB_S3" = ok ] && { echo "S3-OK" >&2; exit 0; }; echo "botocore AccessDenied traceback" >&2; exit 1 ;;
-  *app_bundle.py*fetch*) echo "DRIVE-FETCHED"; [ "$STUB_DRIVE" = ok ] && exit 0; echo "drive unreachable" >&2; exit 1 ;;
+  *app_bundle.py*fetch*) echo "DRIVE-FETCHED $*"; [ "$STUB_DRIVE" = ok ] && exit 0; echo "drive unreachable" >&2; exit 1 ;;
 esac
 exit 0
 """
 
 
-def run_download(tmp_path, *args, probe="fail", s3="fail", drive="ok"):
+def run_download(tmp_path, *args, s3="ok", drive="ok", store=None):
     bindir = tmp_path / "bin"
     bindir.mkdir(exist_ok=True)
     stub = bindir / "python3"
     stub.write_text(STUB)
     stub.chmod(0o755)
-    env = {"PATH": f"{bindir}:/usr/bin:/bin", "HOME": str(tmp_path), "STUB_PROBE": probe, "STUB_S3": s3, "STUB_DRIVE": drive}
-    return subprocess.run(["bash", "download-models.sh", "--only", "ner", *args], cwd=ROOT, env=env, capture_output=True, text=True)
+    log = tmp_path / "calls.log"
+    log.write_text("")
+    env = {"PATH": f"{bindir}:/usr/bin:/bin", "HOME": str(tmp_path), "STUB_LOG": str(log), "STUB_S3": s3, "STUB_DRIVE": drive}
+    if store:
+        env["MODEL_STORE_BASE"] = store
+    r = subprocess.run(["bash", "download-models.sh", *args], cwd=ROOT, env=env, capture_output=True, text=True)
+    return r, log.read_text()
 
 
-def test_auto_falls_back_to_drive_quietly_when_s3_is_not_readable(tmp_path):
-    """Credentials for a different AWS account / expired SSO / no awscli: S3 is unusable, so use Drive with no error."""
-    r = run_download(tmp_path, probe="fail", drive="ok")
-    assert r.returncode == 0
-    assert "DRIVE-FETCHED" in r.stdout and "S3 is not available" in r.stdout
-    assert "ERROR" not in r.stderr and "AccessDenied" not in r.stderr
+def test_default_downloads_the_production_models_from_drive_without_touching_s3(tmp_path):
+    r, calls = run_download(tmp_path, s3="fail")
+    assert r.returncode == 0 and "DRIVE-FETCHED" in r.stdout and "model_store.py" not in calls
+    assert "--force" not in calls
 
 
-def test_auto_falls_back_when_a_download_fails_after_a_good_probe(tmp_path):
-    r = run_download(tmp_path, probe="ok", s3="fail", drive="ok")
-    assert r.returncode == 0 and "DRIVE-FETCHED" in r.stdout
-    assert "AccessDenied" not in r.stderr and "ERROR" not in r.stderr  # the S3 failure is held back, not shown
+def test_force_and_dry_run_on_drive(tmp_path):
+    r, calls = run_download(tmp_path, "--force")
+    assert r.returncode == 0 and "fetch --force" in calls
+    r, calls = run_download(tmp_path, "--dry-run")
+    assert r.returncode == 0 and "Would download clearanceiq-models.zip" in r.stdout and "app_bundle.py" not in calls
 
 
-def test_auto_uses_s3_when_it_works_and_never_touches_drive(tmp_path):
-    r = run_download(tmp_path, probe="ok", s3="ok", drive="fail")
-    assert r.returncode == 0 and "DRIVE-FETCHED" not in r.stdout and "S3-OK" in r.stderr
+def test_a_drive_failure_is_an_error_and_does_not_fall_back_to_s3(tmp_path):
+    r, calls = run_download(tmp_path, drive="fail", store="s3://bucket/ml-tasks")
+    assert r.returncode == 1 and "drive unreachable" in r.stderr and "model_store.py" not in calls
 
 
-def test_auto_errors_only_when_every_method_fails(tmp_path):
-    r = run_download(tmp_path, probe="ok", s3="fail", drive="fail")
-    assert r.returncode == 1
-    assert "all download methods failed" in r.stderr and "AccessDenied" in r.stderr  # now the S3 detail is shown
-    r = run_download(tmp_path, probe="fail", drive="fail")
-    assert r.returncode == 1 and "could not download the models from S3 or Google Drive" in r.stderr
+def test_the_cpu_profile_is_what_the_drive_bundle_already_is(tmp_path):
+    for args in (["--profile", "cpu"], ["--only", "ner"], ["--only", "asr-ct2"]):
+        r, calls = run_download(tmp_path, *args)
+        assert r.returncode == 0 and "app_bundle.py" in calls, args
 
 
-def test_explicit_s3_never_falls_back(tmp_path):
-    r = run_download(tmp_path, "--source", "s3", s3="fail", drive="ok")
-    assert r.returncode == 1 and "DRIVE-FETCHED" not in r.stdout and "AccessDenied" in r.stderr
+def test_options_that_need_the_s3_store_are_refused_without_source_s3(tmp_path):
+    for args in (["--profile", "gpu"], ["--only", "asr"], ["--only", "asr-results"], ["--run-id", "x"]):
+        r, calls = run_download(tmp_path, *args)
+        assert r.returncode == 2 and "--source s3" in r.stderr and calls == "", args
 
 
-def test_explicit_gdrive_skips_s3(tmp_path):
-    r = run_download(tmp_path, "--source", "gdrive", probe="ok", s3="ok", drive="ok")
-    assert r.returncode == 0 and "DRIVE-FETCHED" in r.stdout and "S3-OK" not in r.stderr
+def test_s3_needs_a_configured_store_and_never_falls_back(tmp_path):
+    r, calls = run_download(tmp_path, "--source", "s3")
+    assert r.returncode == 2 and "MODEL_STORE_BASE" in r.stderr and calls == ""  # nothing hard-coded to fall back on
+    r, calls = run_download(tmp_path, "--source", "s3", "--only", "ner", store="s3://bucket/ml-tasks", s3="fail")
+    assert r.returncode == 1 and "AccessDenied" in r.stderr and "app_bundle.py" not in calls
+    r, calls = run_download(tmp_path, "--source", "s3", "--only", "ner", store="s3://bucket/ml-tasks")
+    assert r.returncode == 0 and "--base s3://bucket/ml-tasks" in calls and "app_bundle.py" not in calls
 
 
-# ---- artifacts.check_access: why S3 is (not) usable ----
+def test_the_scripts_parse_and_the_s3_scripts_name_no_bucket():
+    for f in ("setup.sh", "download-models.sh", "upload-models.sh"):
+        assert subprocess.run(["bash", "-n", f], cwd=ROOT).returncode == 0, f
+    import re
 
-def _err(name, code=""):
-    e = type(name, (Exception,), {})("boom")
-    e.response = {"Error": {"Code": code}}
-    return e
-
-
-class _Client:
-    def __init__(self, exc=None, count=1):
-        self.exc, self.count = exc, count
-
-    def list_objects_v2(self, **kw):
-        if self.exc:
-            raise self.exc
-        return {"KeyCount": self.count}
-
-
-def test_check_access_reports_why_s3_is_unusable():
-    import sys
-    sys.path.insert(0, str(ROOT / "src"))
-    import artifacts
-    base = "s3://bucket/ml-tasks"
-    assert artifacts.check_access(_Client(), base) is None
-    assert "different AWS account" in artifacts.check_access(_Client(_err("ClientError", "AccessDenied")), base)
-    assert "no AWS credentials" in artifacts.check_access(_Client(_err("NoCredentialsError")), base)
-    assert "expired" in artifacts.check_access(_Client(_err("TokenRetrievalError")), base)
-    assert "expired" in artifacts.check_access(_Client(_err("ClientError", "ExpiredToken")), base)
-    assert "cannot reach" in artifacts.check_access(_Client(_err("EndpointConnectionError")), base)
-    assert "no models found" in artifacts.check_access(_Client(count=0), base)
-    assert artifacts.check_access(_Client(), "not-an-s3-uri")  # a bad URI is reported, never raised
+    for f in ("src/artifacts.py", "scripts/model_store.py", "scripts/lib/model_common.sh", "upload-models.sh", "download-models.sh", "README.md", "docs/report.md"):
+        named = re.findall(r"s3://(?!<bucket>|bucket|my-bucket|other-bucket)[A-Za-z0-9][A-Za-z0-9._-]*", (ROOT / f).read_text())
+        assert not named, (f, named)  # the private bucket is configured through MODEL_STORE_BASE, never written into the repository
 
 
 # ---- setup.sh: Jupyter kernel registration must survive a broken pyzmq/ipykernel (a stub conda records the calls) ----

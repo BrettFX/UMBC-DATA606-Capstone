@@ -29,8 +29,16 @@ PROFILE_GPU="asr asr-results ner-data ner"       # GPU: the full-precision model
 # The conda environment the project's dependencies (boto3, spaCy, transformers, ...) live in. Override if yours differs.
 CONDA_ENV_NAME="${PIPELINE_CONDA_ENV:-data-science}"
 
-# Optional override of the S3 location, e.g. MODEL_STORE_BASE=s3://other-bucket/ml-tasks
+# Where the optional S3 experiment store lives, e.g. MODEL_STORE_BASE=s3://my-bucket/ml-tasks. Not hard-coded: the original store is
+# private and optional, and the production models come from the Google Drive bundle (download-models.sh default).
 MODEL_STORE_BASE="${MODEL_STORE_BASE:-}"
+
+require_store_base() {
+    [[ -n "$MODEL_STORE_BASE" ]] && return 0
+    echo "No S3 model store is configured. S3 is optional (experiment tracking and traceability); the production models come from" >&2
+    echo "Google Drive via ./download-models.sh. To use an S3 store, set MODEL_STORE_BASE=s3://<bucket>/ml-tasks first." >&2
+    return 1
+}
 
 # Best-effort conda activation, same approach as run-pipeline.sh: fall back to whatever python3 is on PATH.
 activate_conda_env() {

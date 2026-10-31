@@ -6,6 +6,10 @@ inference should use, e.g. ml-tasks/asr/lora-whisper-medium-en/latest/. `upload`
 unless --yes is passed; `download` is safe by default (it never overwrites a differing local file without
 --force). AWS credentials come from the standard chain (environment, ~/.aws).
 
+This S3 store is the optional experiment store (every run of every model, kept for traceability and for the training and
+notebook work). It is not hard-coded: set MODEL_STORE_BASE=s3://<bucket>/ml-tasks (or pass --base). The production models
+that the app needs are distributed through Google Drive instead (./download-models.sh, scripts/app_bundle.py).
+
 Usage:
     python scripts/model_store.py list
     python scripts/model_store.py upload --task ner --model-name spacy-balanced --variants spacy-balanced --set-latest --yes
@@ -31,7 +35,7 @@ logger = logging.getLogger(__name__)
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--base", default=artifacts.DEFAULT_BASE, help=f"S3 prefix holding the task folders (default: {artifacts.DEFAULT_BASE}).")
+    p.add_argument("--base", default=artifacts.DEFAULT_BASE, help="S3 prefix holding the task folders (default: $MODEL_STORE_BASE, e.g. s3://<bucket>/ml-tasks).")
     p.add_argument("--log-level", default="INFO", choices=["DEBUG", "INFO", "WARNING", "ERROR"])
     sub = p.add_subparsers(dest="command", required=True)
 
@@ -61,37 +65,17 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     dl.add_argument("--force", action="store_true", help="Overwrite local files that differ from the download.")
     dl.add_argument("--dry-run", action="store_true", help="Show what would be downloaded; write nothing.")
 
-    sub.add_parser("probe", help="Exit 0 if these AWS credentials can read the model store; else print why and exit 1.")
-
     ls = sub.add_parser("list", help="List the models, their runs and what `latest` points to.")
     ls.add_argument("--task", choices=["asr", "ner"], default=None)
     return p.parse_args(argv)
 
 
-def probe(base: str) -> int:
-    """Quietly check read access (short timeouts); the reason goes to stdout so a calling script can show or ignore it."""
-    try:
-        import boto3
-        from botocore.config import Config
-        client = boto3.client("s3", config=Config(connect_timeout=5, read_timeout=10, retries={"max_attempts": 1}))
-    except ImportError:
-        print("boto3 is not installed")
-        return 1
-    except Exception as e:  # noqa: BLE001 -- e.g. a broken profile or region configuration
-        print(f"{type(e).__name__}: {e}"[:160])
-        return 1
-    reason = artifacts.check_access(client, base)
-    if reason:
-        print(reason)
-        return 1
-    return 0
-
-
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     logging.basicConfig(level=args.log_level, format="%(asctime)s %(levelname)s %(message)s")
-    if args.command == "probe":
-        return probe(args.base)
+    if not args.base:
+        logger.error(artifacts.NO_STORE_MESSAGE)
+        return 2
     import boto3
     client = boto3.client("s3")
     bucket, base_prefix = artifacts.split_s3_uri(args.base)

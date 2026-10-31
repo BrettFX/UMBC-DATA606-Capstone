@@ -53,13 +53,12 @@ Full 1,909-utterance test split, each model scored once (details, confidence int
 | `tests/` | Unit tests for the pipelines and the download/setup scripts |
 | `data/` | Documentation and the human-verified NER evaluation sets; raw and processed data are git-ignored ([data/README.md](data/README.md)) |
 | `res/` | Figures used by the report and deck, benchmark logs, NER annotator experiment results |
-| `setup.sh`, `run-app.sh`, `run-pipeline.sh`, `download-models.sh`, `upload-models.sh` | Environment setup, app launch, pipeline driver, model store |
+| `setup.sh`, `run-app.sh`, `run-pipeline.sh`, `download-models.sh`, `upload-models.sh` | Environment setup, app launch, pipeline driver, model download (Google Drive) and the optional S3 experiment store |
 
 ## Launch ClearanceIQ
 
 ```bash
-./setup.sh                              # once: conda env, system packages (espeak-ng, ffmpeg), Jupyter kernel
-./download-models.sh --profile cpu      # once: ASR + NER models (S3, or the Google Drive bundle if you have no AWS access)
+./setup.sh                              # once: conda env, system packages (espeak-ng, ffmpeg), Jupyter kernel, production models
 ./run-app.sh                            # opens http://localhost:8501
 ```
 
@@ -83,7 +82,10 @@ registers it as a Jupyter kernel named `data-science`, matching the notebooks' k
 so it appears in Jupyter and VS Code without manual `ipykernel` setup. If
 you already have a `data-science` env on a different Python version, remove it first with
 `conda env remove -n data-science`. Non-conda users can use `pyenv`/`uv`, which read
-`.python-version`, then `pip install --extra-index-url https://download.pytorch.org/whl/cu128 -r requirements.txt`.
+`.python-version`, then `pip install --extra-index-url https://download.pytorch.org/whl/cu128 -r requirements.txt` and `./download-models.sh`.
+
+`setup.sh` also downloads the production models from Google Drive (see "Getting the trained models"); set `SETUP_SKIP_MODELS=1` to skip that,
+and a failed download only warns.
 
 ## Running the pipeline from the command line
 
@@ -125,8 +127,9 @@ code, so reruns reproduce the splits; fine-tuned model scores vary by a few tent
 4. **NER labels and students.** In a separate vLLM environment: `scripts/run_ner_annotate.py` (about 12 h on the dev GPU); then
    `python scripts/run_ner_curate.py` and `python scripts/run_ner_train.py --model spacy --balance`.
 5. **Benchmarks.** `python scripts/benchmark_inference.py` (see `res/benchmarks/EXPERIMENTS.md`).
-6. **Report tables and figures.** `notebooks/machine_learning.ipynb` loads the saved results; to skip the multi-hour training runs,
-   fetch them with `./download-models.sh` (the `asr-results` and `ner-data` groups).
+6. **Report tables and figures.** `notebooks/machine_learning.ipynb` loads the saved results. To skip the multi-hour training runs, restore
+   them from an S3 experiment store with `./download-models.sh --source s3` (the `asr-results` and `ner-data` groups; see "Getting the trained
+   models"). Without a store, the notebook's saved outputs can still be read on GitHub, and everything up to its production-results sections re-runs as is.
 
 `./run-pipeline.sh` walks through the ingest, NER and ASR stages interactively.
 
@@ -143,38 +146,43 @@ Two English corpora with no accent or speaker metadata, about 7.4 hours of real 
 extraction (the NER cannot detect a misheard digit). ClearanceIQ has not been tested with controllers or pilots. See the report,
 Section 7.3.
 
-## Getting and publishing the trained models
+## Getting the trained models
 
-The best ASR and NER models are stored in S3 at
-`s3://endurasoft-dev-ml-ops/ml-tasks/<task>/<model-name>/<run-id>/`, with a `latest/` copy of the
-run that inference should use (for example `ml-tasks/asr/lora-whisper-medium-en/latest/` and
-`ml-tasks/ner/spacy-balanced/latest/`). Two driver scripts wrap `scripts/model_store.py`; they need AWS
-credentials (environment or `~/.aws`) and are safe to re-run.
+**Production models (the default, no AWS account needed).** `./setup.sh` downloads them for you; to fetch or refresh them on their own:
 
 ```bash
-./download-models.sh --profile cpu # a device WITHOUT a GPU: CTranslate2 int8 ASR model + NER (~0.8 GB, no torch needed)
-./download-models.sh --profile gpu # a device with a GPU: full-precision ASR model + NER (~1.5 GB)
-./download-models.sh               # everything (full ASR model, CTranslate2 ASR model, NER)
-./download-models.sh --only ner    # one group (asr, asr-ct2, ner); --dry-run shows the plan; --run-id X fetches a specific run
-./upload-models.sh                 # publish the current best models as new runs and update latest (asks first)
-./upload-models.sh --dry-run       # show the plan only; a model that already matches latest is skipped
+./download-models.sh          # the app's models from a public Google Drive folder (~0.7 GB), skipped if already installed
+./download-models.sh --force  # download and extract them again
 ```
 
-**No S3 access? Run the app from a Google Drive bundle.** `./download-models.sh` (default `--source auto`) falls back to a
-single zip, `clearanceiq-models.zip` (~0.7 GB: the CTranslate2 ASR model and both spaCy NER models, everything the Streamlit
-app loads), in a public view-only [Drive folder](https://drive.google.com/drive/folders/1F4tGwPjIgFPdo3ZClRX5-y3gFGThBWZ1)
-whenever S3 can't be used (no AWS credentials, credentials for a different AWS account, an expired SSO login, no network or no `boto3`) or a download fails part-way, with no error shown. Force Drive with `--source gdrive`; `--source s3` never falls back, and an error appears only then or when every method fails. The zip is checked against `app-models.sha256`
-(committed here) before extraction, and you can also download it by hand and run
-`python scripts/app_bundle.py fetch --zip <file>`. The bundle does not include what the notebooks and training need
-(full-precision model, results CSVs, NER data). Maintainers rebuild it with `./package-app-models.sh`,
-upload `dist/clearanceiq-models.zip` to the Drive folder (replacing the old one) and commit the updated `app-models.sha256`.
+The bundle, `clearanceiq-models.zip`, holds exactly what the Streamlit app loads: the CTranslate2 int8 ASR model, both spaCy NER
+models and the small metrics files behind the model cards. It is hosted in a public view-only
+[Drive folder](https://drive.google.com/drive/folders/1F4tGwPjIgFPdo3ZClRX5-y3gFGThBWZ1). Because a public download location could be
+altered, the zip's sha256 is committed here (`app-models.sha256`) and checked before anything is extracted, and extraction refuses any
+path outside `models/`. If the download fails, fetch the zip by hand and run `python scripts/app_bundle.py fetch --zip <file>`.
+Maintainers rebuild it with `./package-app-models.sh`, upload `dist/clearanceiq-models.zip` to the Drive folder (replacing the old one)
+and commit the updated `app-models.sha256`.
 
-The ASR model is published twice: the merged full-precision model (`asr/lora-whisper-medium-en`) and its
-CTranslate2 int8 conversion (`asr/lora-whisper-medium-en-ct2-int8`), which is what a CPU device runs
+**Optional: the S3 experiment store.** For experiment tracking and traceability the training runs were also published to a private,
+versioned S3 store (`<store>/<task>/<model-name>/<run-id>/`, with a `latest/` copy of the run inference should use). It keeps every run
+and holds what the bundle does not: the full-precision ASR model, the 8-epoch small model, the other NER students, and the saved
+results and NER data that the notebooks' results sections load. Nothing in the repository depends on it, and it is not needed to run the
+app. To use a store of your own, point `MODEL_STORE_BASE` at it:
+
+```bash
+export MODEL_STORE_BASE=s3://<bucket>/ml-tasks
+./download-models.sh --source s3                     # everything: full ASR model, CTranslate2 ASR model, NER, results
+./download-models.sh --source s3 --profile gpu       # a device with a GPU: full-precision ASR model + NER (~1.5 GB)
+./download-models.sh --source s3 --only ner          # one group (asr, asr-ct2, ner, asr-results, ner-data, ...); --run-id X fetches a specific run
+./upload-models.sh                                   # publish the current best models as new runs and update latest (asks first)
+./upload-models.sh --dry-run                         # show the plan only; a model that already matches latest is skipped
+```
+
+`--source s3` never falls back to Drive, and `--profile gpu`, `--only` groups other than the app's and `--run-id` need it. Which local models
+count as "the best" is a short list in `scripts/lib/model_common.sh`; `python scripts/model_store.py --help` has the lower-level commands
+(`list`, `promote`, per-run `upload`/`download`). The ASR model is published twice: the merged full-precision model
+(`asr/lora-whisper-medium-en`) and its CTranslate2 int8 conversion (`asr/lora-whisper-medium-en-ct2-int8`), which is what a CPU device runs
 (`asr.inference.best_transcriber()` picks the right one; see `res/benchmarks/EXPERIMENTS.md` for why).
-Which local models count as "the best" is a short list in `scripts/lib/model_common.sh`; change a row
-there when a better model replaces one. `python scripts/model_store.py --help` has the lower-level commands
-(`list`, `promote`, per-run `upload`/`download`).
 
 ## Data and licensing
 

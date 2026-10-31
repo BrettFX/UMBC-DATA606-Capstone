@@ -1,34 +1,37 @@
 #!/usr/bin/env bash
-# Download the latest ASR and NER models from S3 into this repo, so a new device is ready in one command.
-# A CPU-only device needs just the small CTranslate2 model (no torch required); use --profile cpu for it.
+# Download the trained models into this repo, so a new device is ready in one command.
 #
-# Files land in the same local paths the training code uses (models/..., models/ner/..., data/processed/...),
-# checksums are verified against each run's manifest, files that already match are skipped, and a local file
-# that differs is never overwritten unless you pass --force. Which models count as "the best" is listed in
-# scripts/lib/model_common.sh.
+# Default (--source gdrive): the production app models, from a public view-only Google Drive folder: the CTranslate2 int8
+# ASR model and both spaCy NER models (~0.7 GB). No AWS account, GPU or PyTorch needed. The zip is verified against
+# app-models.sha256 (committed in this repo) before anything is extracted, and a bundle that is already installed is skipped.
+# ./setup.sh runs this for you.
+#
+# Optional (--source s3): the experiment store, kept for experiment tracking and traceability and needed for training and for
+# re-running the notebooks' saved-results sections: every run of every model, the full-precision ASR model, the results CSVs and
+# the NER data. It needs AWS credentials AND the store's location in MODEL_STORE_BASE (s3://<bucket>/ml-tasks); the original
+# store is private. Files land in the paths the training code uses (models/..., data/processed/...), checksums are verified
+# against each run's manifest, files that already match are skipped, and a differing local file is never overwritten without --force.
+# Which models count as "the best" is listed in scripts/lib/model_common.sh.
 #
 # Usage:
-#   ./download-models.sh                    # everything: full ASR model, CTranslate2 ASR model, NER
-#   ./download-models.sh --profile cpu      # a device without a GPU: CTranslate2 ASR model + NER (~0.8 GB)
-#   ./download-models.sh --profile gpu      # a device with a GPU: full ASR model + NER (~1.5 GB)
-#   ./download-models.sh --only ner         # one group: asr, asr-ct2, asr-small-8ep, asr-results, ner-data, ner or ner-variants
-#   ./download-models.sh --dry-run          # show what would be downloaded, write nothing
-#   ./download-models.sh --only asr --run-id 20261006-112237     # a specific run instead of latest
-#   ./download-models.sh --force            # overwrite local files that differ
-# The `asr-results` group (included in every profile) restores the ASR results CSVs into data/processed/asr_results/, and `ner-data` the NER annotations and curated dataset.
-#   ./download-models.sh --source gdrive    # no S3 access: the app-only bundle (CPU ASR model + spaCy NER, ~0.8 GB) from Google Drive
-# S3 needs AWS credentials (environment, ~/.aws or SSO) that can read the bucket. The default (--source auto) probes that
-# first and quietly falls back to the Google Drive bundle if S3 cannot be used for ANY reason (no credentials, a different
-# AWS account, an expired SSO login, no network, boto3 missing) or a download fails part-way. The bundle is enough to run
-# the Streamlit app but not the notebooks or training. An error is shown only when --source s3 is given and S3 fails, or
-# when every download method fails. --source s3 never falls back.
-# The Drive zip is verified against app-models.sha256 (committed in this repo) before anything is extracted.
+#   ./download-models.sh                    # production app models from Google Drive
+#   ./download-models.sh --force            # download and extract them again even if installed
+#   ./download-models.sh --dry-run          # show what would happen, write nothing
+#
+#   export MODEL_STORE_BASE=s3://<bucket>/ml-tasks
+#   ./download-models.sh --source s3                      # everything: full ASR model, CTranslate2 ASR model, NER, results
+#   ./download-models.sh --source s3 --profile cpu        # a device without a GPU: CTranslate2 ASR model + NER + results
+#   ./download-models.sh --source s3 --profile gpu        # a device with a GPU: full ASR model + NER + results
+#   ./download-models.sh --source s3 --only ner           # one group: asr, asr-ct2, asr-small-8ep, asr-results, ner-data, ner or ner-variants
+#   ./download-models.sh --source s3 --only asr --run-id 20261006-112237     # a specific run instead of latest
+# The `asr-results` group (included in every S3 profile) restores the ASR results CSVs into data/processed/asr_results/, and `ner-data`
+# the NER annotations and curated dataset.
 
 set -euo pipefail
 # shellcheck source=scripts/lib/model_common.sh
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/scripts/lib/model_common.sh"
 
-only="" profile="" run_id="" dest_root="" force=0 dry=0 source="auto"
+only="" profile="" run_id="" dest_root="" force=0 dry=0 source="gdrive"
 usage() { sed -n '2,/^set -euo/p' "${BASH_SOURCE[0]}" | sed '$d' | sed 's/^# \{0,1\}//'; }
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -36,7 +39,7 @@ while [[ $# -gt 0 ]]; do
         --profile) profile="${2:?--profile needs cpu or gpu}"; shift 2 ;;
         --run-id) run_id="${2:?--run-id needs a value}"; shift 2 ;;
         --dest-root) dest_root="${2:?--dest-root needs a directory}"; shift 2 ;;
-        --source) source="${2:?--source needs auto, s3 or gdrive}"; shift 2 ;;
+        --source) source="${2:?--source needs gdrive or s3}"; shift 2 ;;
         --force) force=1; shift ;;
         --dry-run) dry=1; shift ;;
         -h|--help) usage; exit 0 ;;
@@ -44,39 +47,31 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-case "$source" in auto|s3|gdrive) ;; *) echo "Unknown --source '$source' (expected auto, s3 or gdrive)." >&2; exit 2 ;; esac
+case "$source" in gdrive|s3) ;; *) echo "Unknown --source '$source' (expected gdrive or s3)." >&2; exit 2 ;; esac
 
-activate_conda_env
-mapfile -t base_args < <(store_base_args)
-
-# The Google Drive bundle: only what the app loads. Prints its own error (and manual-download hint) on failure.
-fetch_from_drive() { command -v python3 >/dev/null 2>&1 && python3 "$REPO_ROOT/scripts/app_bundle.py" fetch; }
-
-auto=0
-if [[ "$source" == "auto" ]]; then
-    auto=1
-    # Having credentials is not enough (a different AWS account or an expired SSO login both have them), so check read access.
-    if reason="$(python3 "$REPO_ROOT/scripts/model_store.py" ${base_args[@]+"${base_args[@]}"} probe 2>/dev/null)"; then
-        source="s3"
-    else
-        echo "S3 is not available (${reason:-could not check access}); using the Google Drive bundle (app models only)."
-        source="gdrive"
-    fi
-fi
 if [[ "$source" == "gdrive" ]]; then
-    [[ "$dry" -eq 1 ]] && { echo "Would download clearanceiq-models.zip from Google Drive and extract it into models/."; exit 0; }
-    if fetch_from_drive; then exit 0; fi
-    [[ "$auto" -eq 1 ]] && echo "ERROR: could not download the models from S3 or Google Drive; see the messages above." >&2
-    exit 1
+    # The Drive bundle is the CPU profile (CTranslate2 ASR model + spaCy NER); other groups and runs only exist in the S3 store.
+    if [[ -n "$run_id" || -n "$dest_root" || ( -n "$only" && "$only" != "asr-ct2" && "$only" != "ner" ) || ( -n "$profile" && "$profile" != "cpu" ) ]]; then
+        echo "These options pick other model groups or runs, which only exist in the optional S3 experiment store." >&2
+        echo "Add --source s3 (and set MODEL_STORE_BASE), or drop them to get the production models from Google Drive." >&2
+        exit 2
+    fi
+    [[ "$dry" -eq 1 ]] && { echo "Would download clearanceiq-models.zip from Google Drive and extract it into models/ (skipped if already installed)."; exit 0; }
+    activate_conda_env
+    args=(fetch); [[ "$force" -eq 1 ]] && args+=(--force)
+    exec python3 "$REPO_ROOT/scripts/app_bundle.py" "${args[@]}"
 fi
 
+# --source s3: the optional experiment store
+require_store_base || exit 2
 models="$(select_models "$only" "$profile")" || exit 2
 if [[ -n "$run_id" && "$(wc -l <<<"$models")" -gt 1 ]]; then
     echo "--run-id needs --only (a run id belongs to one model)." >&2; exit 2
 fi
 
-err_log="$(mktemp)"; trap 'rm -f "$err_log"' EXIT
-failed=0; failed_groups=()
+activate_conda_env
+mapfile -t base_args < <(store_base_args)
+failed=0
 while IFS='|' read -r group task name _; do
     echo
     echo "--- Downloading $group: $task/$name (${run_id:-latest}) ---"
@@ -85,31 +80,11 @@ while IFS='|' read -r group task name _; do
     [[ -n "$dest_root" ]] && args+=(--dest-root "$dest_root")
     [[ "$force" -eq 1 ]] && args+=(--force)
     [[ "$dry" -eq 1 ]] && args+=(--dry-run)
-    if [[ "$auto" -eq 1 ]]; then
-        # Hold the output back so a failure that triggers the Drive fallback is not shown as an error.
-        grp_log="$(mktemp)"
-        if python3 "$REPO_ROOT/scripts/model_store.py" ${base_args[@]+"${base_args[@]}"} "${args[@]}" 2>"$grp_log"; then
-            cat "$grp_log" >&2
-        else
-            { echo "--- $task/$name ---"; cat "$grp_log"; } >>"$err_log"
-            failed=1; failed_groups+=("$group")
-        fi
-        rm -f "$grp_log"
-    elif ! python3 "$REPO_ROOT/scripts/model_store.py" ${base_args[@]+"${base_args[@]}"} "${args[@]}"; then
+    if ! python3 "$REPO_ROOT/scripts/model_store.py" ${base_args[@]+"${base_args[@]}"} "${args[@]}"; then
         echo "FAILED: $task/$name" >&2; failed=1
     fi
 done <<<"$models"
 
 echo
-if [[ "$failed" -eq 0 ]]; then echo "=== Done ==="; exit 0; fi
-if [[ "$auto" -eq 0 ]]; then echo "=== Finished with errors (see above) ===" >&2; exit 1; fi
-
-echo "Note: the S3 download did not complete (not downloaded: ${failed_groups[*]}); using the Google Drive bundle instead."
-[[ "$dry" -eq 1 ]] && { echo "Would download clearanceiq-models.zip from Google Drive and extract it into models/."; exit 0; }
-if fetch_from_drive; then
-    echo "=== Done: app models from Google Drive. The notebooks and training also need S3 access (not downloaded: ${failed_groups[*]}). ==="
-    exit 0
-fi
-echo "ERROR: all download methods failed. The S3 errors were:" >&2
-cat "$err_log" >&2
-exit 1
+if [[ "$failed" -eq 0 ]]; then echo "=== Done ==="; else echo "=== Finished with errors (see above) ===" >&2; fi
+exit "$failed"

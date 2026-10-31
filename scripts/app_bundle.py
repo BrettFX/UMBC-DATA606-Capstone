@@ -9,8 +9,9 @@ Maintainer (after retraining or promoting a model):
     python scripts/app_bundle.py package            # writes dist/clearanceiq-models.zip and updates app-models.sha256
     # upload the zip to the Drive folder (replace the old file), then commit app-models.sha256
 
-Anyone without S3 access:
-    python scripts/app_bundle.py fetch              # downloads from Drive, verifies, extracts into models/
+Everyone else (this is what ./setup.sh and ./download-models.sh run):
+    python scripts/app_bundle.py fetch              # downloads from Drive, verifies, extracts into models/; skipped if already installed
+    python scripts/app_bundle.py fetch --force      # download and extract again
     python scripts/app_bundle.py fetch --zip path/to/clearanceiq-models.zip    # already downloaded by hand
 """
 
@@ -39,6 +40,7 @@ BUNDLE_PATHS = [
     ("models/ner/spacy-balanced/results.json", True),
 ]
 ALLOWED_PREFIX = "models/"
+MARKER = ".app-bundle.sha256"   # written under models/ after a verified extraction: the installed bundle's digest, then its files
 CHUNK = 1 << 20
 
 
@@ -95,26 +97,42 @@ def safe_extract(zip_path: Path, dest: Path) -> list[str]:
 
 
 def download_from_drive(workdir: Path) -> Path:
+    manual = (f"Download {BUNDLE_NAME} by hand from\n  {DRIVE_FOLDER_URL}\nand run: python scripts/app_bundle.py fetch --zip <file>")
     try:
         import gdown
     except ImportError:
-        raise SystemExit("gdown is not installed. Run ./setup.sh (or pip install gdown), or download the zip by hand from\n"
-                         f"  {DRIVE_FOLDER_URL}\nand run: python scripts/app_bundle.py fetch --zip <file>") from None
-    gdown.download_folder(url=DRIVE_FOLDER_URL, output=str(workdir), quiet=False, use_cookies=False)
+        raise SystemExit(f"gdown is not installed (run ./setup.sh, or pip install gdown).\n{manual}") from None
+    try:
+        gdown.download_folder(url=DRIVE_FOLDER_URL, output=str(workdir), quiet=False, use_cookies=False)
+    except Exception as exc:  # noqa: BLE001 -- network, quota and permission failures all end the same way: do it by hand
+        raise SystemExit(f"The Google Drive download failed ({type(exc).__name__}: {exc}).\n{manual}") from exc
     found = list(workdir.rglob(BUNDLE_NAME))
     if not found:
-        raise SystemExit(f"{BUNDLE_NAME} was not found in the Drive folder {DRIVE_FOLDER_URL}")
+        raise SystemExit(f"{BUNDLE_NAME} was not found in the Drive folder.\n{manual}")
     return found[0]
 
 
-def fetch(zip_path: Path | None, dest: Path = REPO_ROOT, checksum_file: Path = CHECKSUM_FILE) -> int:
+def installed(want: str, dest: Path = REPO_ROOT) -> bool:
+    """True if this exact bundle was extracted into dest/models and every one of its files is still there."""
+    marker = dest / ALLOWED_PREFIX / MARKER
+    if not marker.is_file():
+        return False
+    digest, *files = marker.read_text().split()
+    return digest == want and bool(files) and all((dest / f).is_file() for f in files)
+
+
+def fetch(zip_path: Path | None, dest: Path = REPO_ROOT, checksum_file: Path = CHECKSUM_FILE, force: bool = False) -> int:
     want = expected_digest(checksum_file)
+    if zip_path is None and not force and installed(want, dest):
+        print(f"The app models are already installed (bundle sha256 {want[:12]}...); use --force to download them again.")
+        return 0
     with tempfile.TemporaryDirectory() as tmp:
         src = zip_path or download_from_drive(Path(tmp))
         got = sha256_of(src)
         if got != want:
             raise SystemExit(f"Checksum mismatch for {src.name}: expected {want}, got {got}. Nothing was extracted.")
         names = safe_extract(src, dest)
+    (dest / ALLOWED_PREFIX / MARKER).write_text("\n".join([want, *names]) + "\n")
     print(f"Verified and extracted {len(names)} files into {dest / 'models'}")
     return 0
 
@@ -126,11 +144,12 @@ def main(argv: list[str] | None = None) -> int:
     pk.add_argument("--out", type=Path, default=REPO_ROOT / "dist" / BUNDLE_NAME)
     fe = sub.add_parser("fetch", help="Download (or use --zip), verify against app-models.sha256, extract into models/.")
     fe.add_argument("--zip", type=Path, default=None, help="Use an already-downloaded bundle instead of downloading.")
+    fe.add_argument("--force", action="store_true", help="Download and extract even if this bundle is already installed.")
     args = p.parse_args(argv)
     if args.command == "package":
         package(args.out)
         return 0
-    return fetch(args.zip)
+    return fetch(args.zip, force=args.force)
 
 
 if __name__ == "__main__":

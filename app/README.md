@@ -26,7 +26,7 @@ Not certified or validated for operational use.
 ## Run
 
 ```bash
-./download-models.sh --profile cpu    # one-time: ASR + NER models (S3, or a Google Drive bundle if you have no AWS access)
+./setup.sh                          # one-time: environment and the production models (Google Drive); ./download-models.sh refreshes them
 ./run-app.sh                          # opens http://localhost:8501
 ```
 

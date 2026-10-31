@@ -14,7 +14,9 @@
 #   ./upload-models.sh --dry-run            # show the plan only
 #   ./upload-models.sh --yes                # no confirmation prompt (for scripts)
 #   ./upload-models.sh --no-latest          # upload the run but leave `latest` where it is
-# Needs AWS credentials (environment or ~/.aws) with write access to the bucket.
+# Needs AWS credentials (environment or ~/.aws) with write access to the bucket, and the store's location in
+# MODEL_STORE_BASE (s3://<bucket>/ml-tasks). The S3 store is optional: it keeps every run for experiment tracking and traceability, while the
+# production models are distributed as a Google Drive bundle (see scripts/app_bundle.py and the README).
 
 set -euo pipefail
 # shellcheck source=scripts/lib/model_common.sh
@@ -34,6 +36,7 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+require_store_base || exit 2
 models="$(select_models "$only" "")" || exit 2
 if [[ -n "$run_id" && "$(wc -l <<<"$models")" -gt 1 ]]; then
     echo "--run-id needs --only (a run id belongs to one model)." >&2; exit 2

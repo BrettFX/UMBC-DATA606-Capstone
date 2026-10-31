@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Creates (or updates) the conda environment defined in environment.yml and
-# registers it as a Jupyter kernel. Also installs system packages the app needs (espeak-ng, ffmpeg).
+# registers it as a Jupyter kernel, installs the system packages the app needs (espeak-ng, ffmpeg) and downloads the production
+# models (Google Drive bundle). Set SETUP_SKIP_MODELS=1 to skip the model download.
 # Safe to re-run: an existing environment is updated (never pruned), a broken pyzmq/ipykernel (left by an earlier pip install) is repaired,
 # and failing to register the Jupyter kernel only warns, since the app does not need it.
 #
@@ -64,5 +65,16 @@ source "$REPO_ROOT/scripts/lib/jupyter_env.sh"
 kernel_ok=1
 register_jupyter_kernel "$CONDA_ENV_NAME" || kernel_ok=0
 
+# Production models for the app (CTranslate2 ASR + spaCy NER, ~0.7 GB) from the public Google Drive bundle. No AWS account needed;
+# skipped when already installed. A failed download only warns (retry later with ./download-models.sh); SETUP_SKIP_MODELS=1 skips it.
+models_ok=1
+if [[ "${SETUP_SKIP_MODELS:-0}" == "1" ]]; then
+    echo "Skipping the model download (SETUP_SKIP_MODELS=1); run ./download-models.sh when you need the models."
+elif ! PIPELINE_CONDA_ENV="$CONDA_ENV_NAME" "$REPO_ROOT/download-models.sh"; then
+    models_ok=0
+    echo "WARNING: the models were not downloaded. The environment is ready; retry with ./download-models.sh (see the message above)." >&2
+fi
+
 echo "Done. Activate with: conda activate $CONDA_ENV_NAME"
 [[ "$kernel_ok" -eq 1 ]] || echo "(The Jupyter kernel was not registered; see the warning above.)"
+[[ "$models_ok" -eq 1 ]] || echo "(The models were not downloaded; run ./download-models.sh.)"

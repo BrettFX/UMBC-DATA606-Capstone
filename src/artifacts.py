@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import subprocess
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -155,7 +156,14 @@ def upload(items: list[Item], manifest: dict, dest_uri: str, client, *, overwrit
     return len(items) + 1
 
 
-DEFAULT_BASE = "s3://endurasoft-dev-ml-ops/ml-tasks"
+# The experiment store's S3 prefix (s3://<bucket>/ml-tasks). Deliberately not hard-coded: the store is private and optional.
+# The production models are distributed through the Google Drive bundle (scripts/app_bundle.py), not through S3.
+DEFAULT_BASE = os.environ.get("MODEL_STORE_BASE", "")
+
+
+NO_STORE_MESSAGE = (
+    "No S3 model store is configured. S3 is optional (experiment tracking and traceability); the production models come from "
+    "Google Drive via ./download-models.sh. To use an S3 store, set MODEL_STORE_BASE=s3://<bucket>/ml-tasks or pass --base.")
 
 
 _MODEL_PARTS = ("/final/", "/final-adapter/", "/model-best/", "/ct2-int8/")
@@ -182,34 +190,6 @@ def unchanged_vs_latest(client, latest_uri: str, manifest: dict) -> str | None:
         keys = lambda m: {f["key"] for f in m["files"]}
         same = bool(keys(manifest)) and keys(manifest) <= keys(remote)
     return remote.get("run_id") if same else None
-
-
-def check_access(client, base_uri: str) -> str | None:
-    """Can these AWS credentials read the model store? None if yes, else a short human-readable reason.
-
-    Having credentials is not enough: a different AWS account, an expired SSO login or no network all fail here, so
-    callers can fall back to another source before starting a download. Never raises.
-    """
-    try:
-        bucket, prefix = split_s3_uri(base_uri)
-        resp = client.list_objects_v2(Bucket=bucket, Prefix=prefix + "/" if prefix else "", MaxKeys=1)
-    except Exception as e:  # noqa: BLE001 -- any failure means "not usable"; botocore has many exception types
-        name = type(e).__name__
-        code = getattr(e, "response", {}).get("Error", {}).get("Code", "")
-        if name == "NoCredentialsError":
-            return "no AWS credentials found"
-        if name in ("TokenRetrievalError", "SSOTokenLoadError", "UnauthorizedSSOTokenError") or code in ("ExpiredToken", "ExpiredTokenException", "InvalidToken"):
-            return "AWS login expired (run `aws sso login`)"
-        if code in ("AccessDenied", "403", "AllAccessDisabled", "InvalidAccessKeyId", "SignatureDoesNotMatch"):
-            return "these AWS credentials cannot read the models bucket (different AWS account?)"
-        if code in ("NoSuchBucket", "404"):
-            return "the models bucket was not found for these credentials"
-        if "Connect" in name or "Endpoint" in name or "Timeout" in name:
-            return "cannot reach AWS"
-        return f"{name}: {e}"[:160]
-    if not resp.get("KeyCount"):
-        return f"no models found under {base_uri}"
-    return None
 
 
 def model_prefix(base: str, task: str, model_name: str) -> str:
