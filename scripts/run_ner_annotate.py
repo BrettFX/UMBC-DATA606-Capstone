@@ -27,6 +27,7 @@ sys.path.insert(0, str(REPO_ROOT / "src"))
 import pandas as pd  # noqa: E402 -- import after sys.path setup
 from ner import AnnotationConfig, VllmBackend, build_pool, load_cache, run_annotation  # noqa: E402
 from ner.prompt import PROMPTS  # noqa: E402
+from hf_revisions import snapshot  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -86,8 +87,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.dry_run:
         return 0
 
+    # vLLM takes no revision argument, so load the pinned snapshot from its local directory. `config.model` keeps the repo id,
+    # so the cache signature (and any existing annotations) is unaffected.
     backend = VllmBackend(
-        preset["model"], cpu_offload_gb=preset["cpu_offload_gb"], enforce_eager=preset["enforce_eager"],
+        snapshot(preset["model"]), cpu_offload_gb=preset["cpu_offload_gb"], enforce_eager=preset["enforce_eager"],
         offload_params=set(filter(None, preset["offload_params"].split(","))), max_num_seqs=preset["max_num_seqs"])
     path = run_annotation(backend, pool, out_dir, config, chunk_size=args.chunk_size, limit=args.limit, seed=args.seed)
     logger.info("annotations: %s", path)

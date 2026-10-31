@@ -23,6 +23,11 @@ from transformers import (EarlyStoppingCallback, Seq2SeqTrainer, Seq2SeqTraining
 from .data import WhisperCollator, load_split
 from .text import normalize_for_scoring
 
+try:  # `src` is on sys.path for scripts and notebooks; the app imports these modules as `src.<package>`
+    from hf_revisions import pin
+except ImportError:
+    from src.hf_revisions import pin
+
 logger = logging.getLogger(__name__)
 
 
@@ -85,12 +90,12 @@ def _metrics_fn(processor):
 def train(config: TrainConfig) -> Path:
     """Fine-tune and return the directory of the saved best model."""
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    processor = WhisperProcessor.from_pretrained(config.model)
+    processor = WhisperProcessor.from_pretrained(config.model, **pin(config.model))  # pinned base model: src/hf_revisions.py
     # Full fine-tuning keeps fp32 master weights (the Trainer handles fp16 mixed precision); small.en's weights +
     # grads + Adam (~4 GB) fit an 8 GB card. LoRA instead freezes an fp16 base and trains small fp32 adapters, which
     # is how a larger model fits the same card.
     model = WhisperForConditionalGeneration.from_pretrained(
-        config.model, dtype=torch.float16 if config.lora and device == "cuda" else torch.float32).to(device)
+        config.model, dtype=torch.float16 if config.lora and device == "cuda" else torch.float32, **pin(config.model)).to(device)
     if config.lora:
         from peft import LoraConfig, get_peft_model
 

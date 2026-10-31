@@ -53,11 +53,26 @@ def to_wav_bytes(samples: np.ndarray, sr: int = config.TTS_SAMPLE_RATE) -> bytes
     return buf.getvalue()
 
 
+KOKORO_REPO = "hexgrad/Kokoro-82M"
+
+
 @st.cache_resource(show_spinner=False)
 def _load_pipeline():
-    from kokoro import KPipeline
+    """Kokoro downloads its weights without a revision, so fetch the pinned files (src/hf_revisions.py) and pass local paths."""
+    from kokoro import KModel, KPipeline
 
-    return KPipeline(lang_code="a", repo_id="hexgrad/Kokoro-82M")  # "a" = American English
+    from src.hf_revisions import hub_file
+
+    model = KModel(repo_id=KOKORO_REPO, config=hub_file(KOKORO_REPO, "config.json"),
+                   model=hub_file(KOKORO_REPO, KModel.MODEL_NAMES[KOKORO_REPO]))
+    return KPipeline(lang_code="a", repo_id=KOKORO_REPO, model=model)  # "a" = American English
+
+
+def _voice_ref(voice: str) -> str:
+    """The pinned local file of a Kokoro voice; the library treats a '.pt' path as the voice itself and skips its own download."""
+    from src.hf_revisions import hub_file
+
+    return hub_file(KOKORO_REPO, f"voices/{voice}.pt")
 
 
 def synthesize(transcript: str, voice: str = config.DEFAULT_TTS_VOICE, speed: float = 1.0, pipeline=None) -> bytes:
@@ -66,8 +81,8 @@ def synthesize(transcript: str, voice: str = config.DEFAULT_TTS_VOICE, speed: fl
     if not text:
         raise AppError("There is no transcript to read back.")
     try:
-        pipe = pipeline or _load_pipeline()
-        chunks = [np.asarray(audio, dtype=np.float32) for _, _, audio in pipe(text, voice=voice, speed=speed) if audio is not None]
+        pipe, voice_arg = (pipeline, voice) if pipeline else (_load_pipeline(), _voice_ref(voice))  # an injected pipeline (tests) takes names
+        chunks = [np.asarray(audio, dtype=np.float32) for _, _, audio in pipe(text, voice=voice_arg, speed=speed) if audio is not None]
     except ImportError as exc:
         raise AppError("Voice read-back is not installed.", "Run ./setup.sh to install the project dependencies and restart the app from that environment.") from exc
     except Exception as exc:

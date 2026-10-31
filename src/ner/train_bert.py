@@ -15,6 +15,11 @@ from .curate import BERT_LABELS
 from .evaluation import evaluate_sets, time_predict
 from .train_spacy import oversample, read_rows
 
+try:  # `src` is on sys.path for scripts and notebooks; the app imports these modules as `src.<package>`
+    from hf_revisions import pin
+except ImportError:
+    from src.hf_revisions import pin
+
 logger = logging.getLogger(__name__)
 LABEL2ID = {label: i for i, label in enumerate(BERT_LABELS)}
 
@@ -84,9 +89,10 @@ def train_bert(curated_dir: Path, out_dir: Path, *, model_name: str = "bert-base
     device = "cuda" if torch.cuda.is_available() else "cpu"
     sets = {p.stem: read_rows(p) for p in curated_dir.glob("*.jsonl") if p.stem != "review_queue"}
     train_rows = oversample(sets["train"], balance_target, balance_cap) if balance else sets["train"]
-    tokenizer = AutoTokenizer.from_pretrained(model_name, add_prefix_space=True) if "roberta" in model_name else AutoTokenizer.from_pretrained(model_name)
+    tokenizer = (AutoTokenizer.from_pretrained(model_name, add_prefix_space=True, **pin(model_name)) if "roberta" in model_name
+                 else AutoTokenizer.from_pretrained(model_name, **pin(model_name)))
     model = AutoModelForTokenClassification.from_pretrained(
-        model_name, num_labels=len(BERT_LABELS), id2label=dict(enumerate(BERT_LABELS)), label2id=LABEL2ID).to(device)
+        model_name, num_labels=len(BERT_LABELS), id2label=dict(enumerate(BERT_LABELS)), label2id=LABEL2ID, **pin(model_name)).to(device)
     out_dir.mkdir(parents=True, exist_ok=True)
     args = TrainingArguments(
         output_dir=str(out_dir / "checkpoints"), learning_rate=learning_rate, per_device_train_batch_size=batch_size,

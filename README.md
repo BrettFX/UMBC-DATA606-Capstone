@@ -184,6 +184,28 @@ count as "the best" is a short list in `scripts/lib/model_common.sh`; `python sc
 (`asr/lora-whisper-medium-en`) and its CTranslate2 int8 conversion (`asr/lora-whisper-medium-en-ct2-int8`), which is what a CPU device runs
 (`asr.inference.best_transcriber()` picks the right one; see `res/benchmarks/EXPERIMENTS.md` for why).
 
+## Pinned Hugging Face revisions
+
+Every dataset and base model the project downloads is pinned to the exact commit its results were produced with, in
+[src/hf_revisions.py](src/hf_revisions.py) (passed to the loaders with `pin()`), so an upstream push cannot silently change the splits,
+baselines or labels. `python scripts/check_hf_revisions.py` confirms the pinned commits still exist and reports whether a repo has moved on.
+
+| Kind | Repo | Commit |
+|---|---|---|
+| Dataset | `jlvdoorn/atcosim` | `b5839d9` |
+| Dataset | `jacktol/ATC-ASR-Dataset` | `075e736` |
+| Dataset | `jlvdoorn/atco2-asr` (retired proposal-stage source) | `3b96f57` |
+| Model | `openai/whisper-medium.en` | `2e98eb6` |
+| Model | `openai/whisper-small.en` | `e872752` |
+| Model | `jacktol/whisper-medium.en-fine-tuned-for-ATC` | `d373acb` |
+| Model | `RedHatAI/Qwen3.5-9B-quantized.w4a16` (annotation teacher) | `a398088` |
+| Model | `RedHatAI/Qwen3.5-4B-quantized.w4a16` | `7a61387` |
+| Model | `Qwen/Qwen3.5-4B`, `Qwen/Qwen3.5-2B` (notebook NER prototype) | `851bf6e`, `15852e8` |
+| Model | `bert-base-uncased` | `86b5e09` |
+| Model | `hexgrad/Kokoro-82M` (voice read-back) | `f3ff357` |
+
+(`src/hf_revisions.py` has the full 40-character SHAs, plus the `whisper-tiny.en` unit-test fixture.)
+
 ## Data and licensing
 
 Raw data is acquired from Hugging Face by the ingest script and is never committed. Both corpora are research and coursework use only; see

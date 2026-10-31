@@ -17,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from ner_vllm_prototype import GOLD_PATH  # noqa: E402  (sets up sys.path)
 
 from ner import PROMPTS, ExampleRetriever, VllmBackend, annotate_all, entity_spans, load_gold, score_spans  # noqa: E402
+from hf_revisions import snapshot  # noqa: E402
 
 V2 = dict(system_prompt=PROMPTS[2])
 V3 = dict(system_prompt=PROMPTS[3])
@@ -48,7 +49,7 @@ def main():
     gold = load_gold(args.gold)
     texts = {u: g["text"] for u, g in gold.items()}
     retriever = ExampleRetriever(gold)
-    backend = VllmBackend(args.model, max_model_len=4096,  # few-shot prompts are longer
+    backend = VllmBackend(snapshot(args.model), max_model_len=4096,  # few-shot prompts are longer
                           gpu_util=args.gpu_util, cpu_offload_gb=args.cpu_offload_gb,
                           offload_params=set(filter(None, args.offload_params.split(","))),
                           enforce_eager=args.enforce_eager, max_num_seqs=args.max_num_seqs)

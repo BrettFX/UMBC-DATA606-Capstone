@@ -22,6 +22,7 @@ sys.path.insert(0, str(REPO / "src"))
 from ner import (  # noqa: E402
     PROMPTS, ExampleRetriever, VllmBackend, annotate_all, entity_spans, load_gold, score_spans, with_spans,
 )
+from hf_revisions import snapshot  # noqa: E402
 
 NER_DIR = REPO / "data" / "processed" / "ner_dataset"
 GOLD_PATH = REPO / "data" / "ner_gold" / "gold.jsonl"
@@ -64,7 +65,7 @@ def main():
         hf_ref = {r["utterance_id"]: r for r in recs}
 
     t0 = time.perf_counter()
-    backend = VllmBackend(args.model, gpu_util=args.gpu_util, cpu_offload_gb=args.cpu_offload_gb,
+    backend = VllmBackend(snapshot(args.model), gpu_util=args.gpu_util, cpu_offload_gb=args.cpu_offload_gb,
                           offload_params=set(filter(None, args.offload_params.split(","))),
                           enforce_eager=args.enforce_eager, max_num_seqs=args.max_num_seqs,
                           guided=not args.no_guided)

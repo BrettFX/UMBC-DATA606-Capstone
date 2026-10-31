@@ -48,6 +48,11 @@ from datasets import Audio, DatasetDict, Value, concatenate_datasets, load_datas
 
 from . import audio_features, quality, schema, text_features
 
+try:  # `src` is on sys.path for scripts and notebooks; the app imports these modules as `src.<package>`
+    from hf_revisions import pin
+except ImportError:
+    from src.hf_revisions import pin
+
 logger = logging.getLogger(__name__)
 
 
@@ -287,7 +292,7 @@ class DataIngestPipeline:
         datasets = {}
         for source_name, repo_id in self.sources.items():
             cache_dir = str(Path(self.data_dir) / "raw" / source_name)
-            dsd = load_dataset(repo_id, cache_dir=cache_dir)
+            dsd = load_dataset(repo_id, cache_dir=cache_dir, **pin(repo_id))  # pinned commit: see src/hf_revisions.py
             datasets[source_name] = dsd
             self.source_counts_[source_name] = {split: len(ds) for split, ds in dsd.items()}
         return datasets
@@ -692,7 +697,7 @@ class DataIngestPipeline:
         """
         for source_name, repo_id in self.sources.items():
             cache_dir = str(Path(self.data_dir) / "raw" / source_name)
-            load_dataset(repo_id, cache_dir=cache_dir)
+            load_dataset(repo_id, cache_dir=cache_dir, **pin(repo_id))
             logger.info("Downloaded raw data for %r to %s", source_name, cache_dir)
 
     def raw_data_exists(self) -> bool:

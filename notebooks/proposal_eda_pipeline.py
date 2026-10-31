@@ -24,6 +24,7 @@ Example:
 from __future__ import annotations
 
 import re
+import sys
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -31,6 +32,9 @@ from typing import Dict, Optional
 
 import pandas as pd
 from datasets import Audio, DatasetDict, Value, concatenate_datasets, load_dataset
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+from hf_revisions import pin  # noqa: E402  (added when the Hugging Face revisions were pinned)
 
 # Hugging Face repo IDs, keyed by the short `dataset_source` name used
 # throughout this project.
@@ -164,7 +168,7 @@ class DataIngestPipeline:
         datasets = {}
         for source_name, repo_id in self.sources.items():
             cache_dir = str(Path(self.data_dir) / "raw" / source_name)
-            dsd = load_dataset(repo_id, cache_dir=cache_dir)
+            dsd = load_dataset(repo_id, cache_dir=cache_dir, **pin(repo_id))
             datasets[source_name] = dsd
             self.source_counts_[source_name] = {split: len(ds) for split, ds in dsd.items()}
         return datasets

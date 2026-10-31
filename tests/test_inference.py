@@ -8,15 +8,17 @@ import pytest
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-TINY = "openai/whisper-tiny.en"
+from hf_revisions import pin  # noqa: E402
+
+TINY = "openai/whisper-tiny.en"  # pinned in src/hf_revisions.py
 
 
 def tiny_dir(tmp_path):
     """A local copy of whisper-tiny.en (so the code path matches a model directory), or skip if not cached."""
     transformers = pytest.importorskip("transformers")
     try:
-        model = transformers.WhisperForConditionalGeneration.from_pretrained(TINY)
-        processor = transformers.WhisperProcessor.from_pretrained(TINY)
+        model = transformers.WhisperForConditionalGeneration.from_pretrained(TINY, **pin(TINY))
+        processor = transformers.WhisperProcessor.from_pretrained(TINY, **pin(TINY))
     except OSError:
         pytest.skip("whisper-tiny.en not cached")
     model.save_pretrained(tmp_path / "tiny")

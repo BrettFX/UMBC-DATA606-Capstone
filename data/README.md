@@ -34,6 +34,10 @@ Each subfolder keeps a `README.md` placeholder so the empty directory structure 
 | ATCOSIM | [jlvdoorn/atcosim](https://huggingface.co/datasets/jlvdoorn/atcosim) | [ATCOSIM project](https://www.spsc.tugraz.at/databases-and-tools/atcosim-air-traffic-control-simulation-speech-corpus.html), TU Graz SPSC lab, featuring simulated ATC communications | 9,559 (7,646 train / 1,913 validation, as published; re-split by this project into 7,459/1,004/1,096 train/validation/test) | ~2.4 GB |
 | ATC-ASR-Dataset | [jacktol/ATC-ASR-Dataset](https://huggingface.co/datasets/jacktol/ATC-ASR-Dataset) | Built from the [UWB ATC Corpus](https://lindat.mff.cuni.cz/repository/xmlui/handle/11858/00-097C-0000-0001-CCA1-0) and the [ATCO2 project](https://www.atco2.org/data)'s 1-Hour Test Subset, featuring real, recorded ATC communications | 8,122 (6,497 train / 812 validation / 813 test) | ~848 MB |
 
+Both HF datasets are pinned to the commit the project's results were produced with (`src/hf_revisions.py`: ATCOSIM `b5839d9`,
+ATC-ASR-Dataset `075e736`), so an upstream change cannot alter the data or the splits; a fresh ingest reproduces `utterances.parquet`
+exactly.
+
 Both HF datasets ship as audio (`audio`) + transcription (`text`) pairs, English only.
 `ATC-ASR-Dataset` additionally includes an `id` field (an opaque per-row hash; kept as
 `source_id` after ingestion). Neither ships recording-level metadata (airport, position,
