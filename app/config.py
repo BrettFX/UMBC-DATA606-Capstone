@@ -37,6 +37,8 @@ DEFAULT_TTS_VOICE = "af_heart"
 
 LLM_MODELS = {"Claude Haiku 5.5 (fast)": "claude-haiku-5-5", "Claude Sonnet 5.5 (balanced)": "claude-sonnet-5-5"}
 DEFAULT_LLM = "Claude Haiku 5.5 (fast)"
+API_KEY_ENV = "ANTHROPIC_API_KEY"  # the name the Anthropic SDK and docs use
+ANTHROPIC_KEYS_URL = "https://platform.claude.com/settings/keys"
 
 DISCLAIMER = ("ClearanceIQ is an **academic research prototype**. It is not certified, not validated for "
               "operational use, and must never be relied on for air traffic control or flight-safety decisions. "

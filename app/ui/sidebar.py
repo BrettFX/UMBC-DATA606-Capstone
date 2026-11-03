@@ -46,11 +46,14 @@ def ai_panel() -> tuple[str | None, str]:
     ss.setdefault("llm_key_checked", "")
     model_label = st.sidebar.selectbox("Claude model", list(config.LLM_MODELS), index=list(config.LLM_MODELS).index(config.DEFAULT_LLM))
     model = config.LLM_MODELS[model_label]
-    key = st.sidebar.text_input("Anthropic API key", type="password", value=os.environ.get("ANTHROPIC_API_KEY", ""),
-                                placeholder="sk-ant-...", help="Used only in this browser session; never saved to disk.")
+    env_key = os.environ.get(config.API_KEY_ENV, "").strip()  # kept out of the widget so it never appears on screen
+    typed = st.sidebar.text_input("Anthropic API key", type="password", value="",
+                                  placeholder=f"Using {config.API_KEY_ENV} from the environment" if env_key else "sk-ant-...",
+                                  help="Used only in this browser session; never saved to disk.")
+    key = typed.strip() or env_key
     if ss.llm_ready and (key.strip() != ss.llm_key_checked or ss.get("llm_model_checked") != model):
         ss.llm_ready = False  # key or model changed: verify again
-    if st.sidebar.button("Test key", use_container_width=True, disabled=not key.strip()):
+    def verify() -> None:
         with st.sidebar, st.spinner("Checking key…"):
             try:
                 explain.test_key(key, model)
@@ -58,8 +61,19 @@ def ai_panel() -> tuple[str | None, str]:
             except AppError as e:
                 ss.llm_ready = False
                 st.sidebar.error(f"{e}" + (f" {e.hint}" if e.hint else ""))
+
+    pressed = st.sidebar.button("Test key", use_container_width=True, disabled=not key.strip())
+    from_env = bool(env_key) and not typed.strip()
+    if pressed:
+        verify()
+    elif from_env and not ss.llm_ready and ss.get("llm_env_tried") != (env_key, model):
+        ss.llm_env_tried = (env_key, model)  # one automatic check per key and model, so a rejected key is not retried on every rerun
+        verify()
+    if from_env:
+        st.sidebar.caption(f"Key read from the {config.API_KEY_ENV} environment variable (not displayed). Type a key above to override it.")
     if ss.llm_ready:
         st.sidebar.success("Key verified. AI explanations enabled.")
     else:
         st.sidebar.caption("Add and test a key to enable plain-English explanations. Only transcript text is sent to Anthropic, never audio.")
+    st.sidebar.caption(f"No key yet? [Create one in the Anthropic Console]({config.ANTHROPIC_KEYS_URL}). API usage is billed separately from a Claude.ai subscription, so the account needs credits.")
     return (key.strip() if ss.llm_ready else None), model

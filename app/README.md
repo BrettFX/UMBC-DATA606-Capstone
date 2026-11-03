@@ -18,7 +18,8 @@ Not certified or validated for operational use.
 - ASR transcript with forced-aligned word timings, entity extraction (spaCy, two variants), WER/CER and entity scores against ground truth
 - Model cards for the ASR model and both NER models
 - Optional plain-English explanation from Claude. It stays disabled until you enter an Anthropic API key and press **Test key**;
-  only transcript text and entity tags are sent, and the key is kept in the browser session only
+  only transcript text and entity tags are sent, and the key is kept in the browser session only;
+  if the `ANTHROPIC_API_KEY` environment variable is set, the app verifies it automatically and uses it without displaying it (useful for demos); a key typed in the sidebar overrides it
 
 - Experimental voice read-back of the transcript with [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M) text-to-speech, a post-process
   after recognition. Installed by `./setup.sh` (`kokoro` from `requirements.txt` plus `espeak-ng` via apt); if `kokoro` is missing the panel stays visible but disabled, with a message to run `./setup.sh` and use the right Python environment

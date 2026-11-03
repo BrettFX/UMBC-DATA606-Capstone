@@ -128,3 +128,25 @@ def test_multi_segment_highlighted_transcript_is_one_bounded_document():
     html = clearance_card.segments_displacy_html(_segments(12))
     assert html.count("class='seg'") == 12 and html.count("<html>") == 1
     assert clearance_card.MAX_MULTI_HEIGHT <= 400  # the iframe height is capped; the content scrolls inside it
+
+
+def test_api_key_from_environment_is_verified_automatically_and_never_shown(monkeypatch):
+    from app.services import explain
+
+    secret = "sk-ant-test-secret-value"
+    checked = []
+    monkeypatch.setenv("ANTHROPIC_API_KEY", secret)
+    monkeypatch.setattr(explain, "test_key", lambda key, model: checked.append(key))
+    at = AppTest.from_file(MAIN, default_timeout=180)
+    at.session_state["entered"] = True
+    at.run()
+    assert not at.exception, at.exception
+    box = next(t for t in at.sidebar.text_input if t.label == "Anthropic API key")
+    assert box.value == "" and secret not in (box.placeholder or "")
+    assert any("ANTHROPIC_API_KEY" in c.value for c in at.sidebar.caption)
+    shown = [str(e.proto) for e in at.sidebar.get("text_input")] + [c.value for c in at.sidebar.caption]
+    assert secret not in " ".join(shown)
+    assert not next(b for b in at.sidebar.button if b.label == "Test key").disabled  # the env key is enough to test
+    assert checked == [secret] and any("Key verified" in x.value for x in at.sidebar.success)
+    at.run()
+    assert checked == [secret]  # verified once per session, not on every rerun
