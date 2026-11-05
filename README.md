@@ -126,6 +126,7 @@ code, so reruns reproduce the splits; fine-tuned model scores vary by a few tent
    on an 8 GB GPU); other experiments and a `--dry-run` are described in the script header.
 4. **NER labels and students.** In a separate vLLM environment: `scripts/run_ner_annotate.py` (about 12 h on the dev GPU); then
    `python scripts/run_ner_curate.py` and `python scripts/run_ner_train.py --model spacy --balance`.
+   `python scripts/run_ner_report.py` prints a per-label precision/recall/F1/support report on the held-out set and saves slide-ready tables to `res/figures/`.
 5. **Benchmarks.** `python scripts/benchmark_inference.py` (see `res/benchmarks/EXPERIMENTS.md`).
 6. **Report tables and figures.** `notebooks/machine_learning.ipynb` loads the saved results. To skip the multi-hour training runs, restore
    them from an S3 experiment store with `./download-models.sh --source s3` (the `asr-results` and `ner-data` groups; see "Getting the trained

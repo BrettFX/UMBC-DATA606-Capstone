@@ -728,6 +728,31 @@ The teacher takes about 3 seconds per utterance on a GPU, so it cannot run insid
 
 ![Effect of rare-label balancing per label](../res/figures/ner_balancing_effect_per_label.png)
 
+**Per-label classification report (held-out set, 100 utterances, 295 spans).** Precision, recall, F1 and support in the layout of scikit-learn's `classification_report`, computed on exact (start, end, label) spans. A span task has no true negatives, so there is no accuracy row; `micro avg` (all spans pooled) is the span-level counterpart and equals the headline F1. Reproduce with `python scripts/run_ner_report.py` (output in `res/ner_classification_report.md`).
+
+| Label | Support | Teacher P | Teacher R | Teacher F1 | Student P | Student R | Student F1 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| CALLSIGN | 91 | 0.93 | 0.89 | 0.91 | 0.87 | 0.89 | 0.88 |
+| COMMAND | 86 | 0.93 | 0.91 | 0.92 | 0.95 | 0.84 | 0.89 |
+| FACILITY | 34 | 0.78 | 0.85 | 0.82 | 0.76 | 0.85 | 0.81 |
+| ALTITUDE | 26 | 1.00 | 0.88 | 0.94 | 1.00 | 0.85 | 0.92 |
+| WAYPOINT | 24 | 0.72 | 0.75 | 0.73 | 0.78 | 0.75 | 0.77 |
+| FREQUENCY | 23 | 1.00 | 0.61 | 0.76 | 0.69 | 0.96 | 0.80 |
+| RUNWAY | 7 | 1.00 | 1.00 | 1.00 | 1.00 | 1.00 | 1.00 |
+| HEADING | 3 | 1.00 | 0.33 | 0.50 | 0.67 | 0.67 | 0.67 |
+| SQUAWK | 1 | 1.00 | 1.00 | 1.00 | 1.00 | 1.00 | 1.00 |
+| **micro avg** | 295 | 0.90 | 0.85 | **0.88** | 0.86 | 0.86 | **0.86** |
+| macro avg | 295 | 0.93 | 0.80 | 0.84 | 0.86 | 0.87 | 0.86 |
+| weighted avg | 295 | 0.91 | 0.85 | 0.88 | 0.87 | 0.86 | 0.86 |
+
+"Teacher" is the Qwen3.5-9B production labels and "Student" is the selected spaCy-balanced model. The two fail differently on FREQUENCY: the teacher is precise but misses digit-only shorthand frequencies (recall 0.61), while the student finds nearly all of them (recall 0.96) at the cost of false positives (precision 0.69). WAYPOINT is weak for both (F1 0.73 and 0.77). HEADING (3 spans) and SQUAWK (1 span) are too rare to interpret, and they weigh as much as the frequent labels in the macro average, which is why the weighted average is the steadier summary.
+
+**Why WAYPOINT scores lowest and RUNWAY highest.** The held-out mistakes and the training set (23,708 spans) point to label ambiguity rather than data volume (the evidence is printed by `notebooks/machine_learning.ipynb`, next to the report above).
+
+- **WAYPOINT (F1 0.77 student, 0.73 teacher; 24 held-out spans) has no fixed form.** The 1,565 training spans contain 202 different names, one to five words long. Some are spelled-out letters (`oscar kilo golf`) that look like callsign registrations, so only context separates them: in `lufthansa seven one five please confirm to romeo alpha kilo` the same kind of phrase is a callsign, and the student tagged it as a waypoint. Boundaries are also fuzzy: `trasadingen st prex` is one human-labeled waypoint, but both models split it in two, and the student tagged `east nelli` as just `nelli`. Each model differs from the human WAYPOINT labels on seven held-out utterances, and five of those utterances are the same for both models.
+- **It is not a data-size problem.** WAYPOINT has 1,565 training spans, 3.4 times as many as RUNWAY (457), and the teacher, which needs no training data, scores no better (0.73). With only 24 held-out spans, each miss moves the score by about 4 points.
+- **RUNWAY (F1 1.00; 7 held-out spans) is close to a template.** All 457 training spans start with the word "runway" and 422 are exactly three words (`runway one three`), so the keyword marks where the span starts and there is little to disagree about. RUNWAY is also rare (1.9% of training spans), which suggests that a consistent format matters more than the amount of data. The 1.00 rests on only seven spans: one miss would lower recall to 0.86, so it shows an easy pattern, not a perfect model.
+
 **Limitations.** Evaluation sets are small (95-100 utterances), exact-match scoring penalizes harmless boundary differences, and the held-out set was frozen only after the prompt and guidelines were settled, so some guideline choices inevitably reflect the gold set.
 
 ## 5.11 Inference Performance and CPU Deployment

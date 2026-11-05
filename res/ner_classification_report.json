@@ -1,0 +1,174 @@
+{
+  "LLM teacher (Qwen3.5-9B production labels)": [
+    {
+      "label": "CALLSIGN",
+      "precision": 0.931,
+      "recall": 0.8901,
+      "f1": 0.9101,
+      "support": 91.0
+    },
+    {
+      "label": "COMMAND",
+      "precision": 0.9286,
+      "recall": 0.907,
+      "f1": 0.9176,
+      "support": 86.0
+    },
+    {
+      "label": "FACILITY",
+      "precision": 0.7838,
+      "recall": 0.8529,
+      "f1": 0.8169,
+      "support": 34.0
+    },
+    {
+      "label": "ALTITUDE",
+      "precision": 1.0,
+      "recall": 0.8846,
+      "f1": 0.9388,
+      "support": 26.0
+    },
+    {
+      "label": "WAYPOINT",
+      "precision": 0.72,
+      "recall": 0.75,
+      "f1": 0.7347,
+      "support": 24.0
+    },
+    {
+      "label": "FREQUENCY",
+      "precision": 1.0,
+      "recall": 0.6087,
+      "f1": 0.7568,
+      "support": 23.0
+    },
+    {
+      "label": "RUNWAY",
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "support": 7.0
+    },
+    {
+      "label": "HEADING",
+      "precision": 1.0,
+      "recall": 0.3333,
+      "f1": 0.5,
+      "support": 3.0
+    },
+    {
+      "label": "SQUAWK",
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "support": 1.0
+    },
+    {
+      "label": "micro avg",
+      "precision": 0.9032,
+      "recall": 0.8542,
+      "f1": 0.878,
+      "support": 295.0
+    },
+    {
+      "label": "macro avg",
+      "precision": 0.9293,
+      "recall": 0.803,
+      "f1": 0.8417,
+      "support": 295.0
+    },
+    {
+      "label": "weighted avg",
+      "precision": 0.9102,
+      "recall": 0.8542,
+      "f1": 0.8761,
+      "support": 295.0
+    }
+  ],
+  "Student: spacy-balanced": [
+    {
+      "label": "CALLSIGN",
+      "precision": 0.871,
+      "recall": 0.8901,
+      "f1": 0.8804,
+      "support": 91.0
+    },
+    {
+      "label": "COMMAND",
+      "precision": 0.9474,
+      "recall": 0.8372,
+      "f1": 0.8889,
+      "support": 86.0
+    },
+    {
+      "label": "FACILITY",
+      "precision": 0.7632,
+      "recall": 0.8529,
+      "f1": 0.8056,
+      "support": 34.0
+    },
+    {
+      "label": "ALTITUDE",
+      "precision": 1.0,
+      "recall": 0.8462,
+      "f1": 0.9167,
+      "support": 26.0
+    },
+    {
+      "label": "WAYPOINT",
+      "precision": 0.7826,
+      "recall": 0.75,
+      "f1": 0.766,
+      "support": 24.0
+    },
+    {
+      "label": "FREQUENCY",
+      "precision": 0.6875,
+      "recall": 0.9565,
+      "f1": 0.8,
+      "support": 23.0
+    },
+    {
+      "label": "RUNWAY",
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "support": 7.0
+    },
+    {
+      "label": "HEADING",
+      "precision": 0.6667,
+      "recall": 0.6667,
+      "f1": 0.6667,
+      "support": 3.0
+    },
+    {
+      "label": "SQUAWK",
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "support": 1.0
+    },
+    {
+      "label": "micro avg",
+      "precision": 0.861,
+      "recall": 0.861,
+      "f1": 0.861,
+      "support": 295.0
+    },
+    {
+      "label": "macro avg",
+      "precision": 0.8576,
+      "recall": 0.8666,
+      "f1": 0.8582,
+      "support": 295.0
+    },
+    {
+      "label": "weighted avg",
+      "precision": 0.8721,
+      "recall": 0.861,
+      "f1": 0.8629,
+      "support": 295.0
+    }
+  ]
+}
