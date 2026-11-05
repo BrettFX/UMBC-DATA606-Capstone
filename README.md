@@ -1,6 +1,6 @@
 # ATC Communications Intelligence
 
-**UMBC DATA 606 Capstone, Fall 2026** | Brett Allen | Advisor: Dr. Chaojie (Jay) Wang
+**UMBC DATA 606 Capstone, Fall 2026** | Brett Allen | Dr. Chaojie (Jay) Wang
 
 Speech recognition and information extraction for air traffic control (ATC) radio. The project fine-tunes Whisper on real and
 simulated ATC audio, extracts nine kinds of aviation entities (callsigns, commands, altitudes, runways, ...) from the transcripts,
@@ -41,6 +41,37 @@ Full 1,909-utterance test split, each model scored once (details, confidence int
 | What makes audio hard (RQ3) | Real vs. simulated audio and very short clips matter most; per-utterance correlations are weak (|rho| at most 0.17) |
 | CPU deployment | About 0.7 s per utterance (real-time factor about 0.2), 2.2 GB RAM, CTranslate2 int8 |
 
+## Screenshots
+
+### ClearanceIQ
+
+Pick or record a clip and ClearanceIQ transcribes it, highlights the entities and builds a clearance card. More views (evidence,
+model cards) are in [app/README.md](app/README.md).
+
+| Audio analysis: waveform and word-synced transcript | Transcript and entities: clearance card and highlighted transcript |
+|---|---|
+| ![ClearanceIQ audio analysis](app/docs/screenshots/02-audio-analysis.png) | ![ClearanceIQ entities](app/docs/screenshots/03-entities.png) |
+
+### NER gold labeler
+
+[scripts/ner/gold/gold_labeler.html](scripts/ner/gold/gold_labeler.html) is a local, single-file browser tool (nothing is uploaded,
+progress autosaves) used to build the human-verified NER evaluation sets. It shows the LLM teacher's pre-labels, lets the annotator
+adjudicate between two candidate labelings (A or B) or edit spans by keyboard, and keeps the annotation guidelines on screen.
+
+| Adjudicating two candidate labelings | Label palette, shortcuts and guidelines |
+|---|---|
+| ![NER gold labeler adjudication view](res/screenshots/ner-labeler-adjudication.png) | ![NER gold labeler guidelines](res/screenshots/ner-labeler-guidelines.png) |
+
+### Training and annotation job monitor
+
+`python scripts/ner/monitor.py` serves a read-only local dashboard (http://localhost:8765) for the long-running jobs: NER annotation
+and ASR fine-tuning. The screenshots show the finished teacher annotation run (15,083 utterances labeled by Qwen3.5-9B, 99.5% valid
+output) with throughput, entity counts and the job log.
+
+| Progress, rate and per-chunk timing | Entity counts and job log |
+|---|---|
+| ![Job monitor overview](res/screenshots/job-monitor-overview.png) | ![Job monitor entity counts and log](res/screenshots/job-monitor-log.png) |
+
 ## Repository structure
 
 | Path | Contents |
@@ -49,10 +80,10 @@ Full 1,909-utterance test split, each model scored once (details, confidence int
 | `notebooks/` | Proposal EDA, comprehensive EDA, machine learning (prototype and production results) |
 | `app/` | ClearanceIQ Streamlit app: `services/` (audio prep, models, pipeline), `ui/`, `samples/`, tests |
 | `src/` | Reusable code: `preprocessing/` (ingest, quality checks, features), `asr/`, `ner/`, `artifacts.py`, `benchmarking.py` |
-| `scripts/` | Command-line entry points (ingest, ASR training, NER annotate/curate/train, benchmarks, model store) |
+| `scripts/` | Command-line entry points (ingest, ASR training, NER annotate/curate/train, benchmarks, model store); `scripts/ner/monitor.py` (job dashboard) and `scripts/ner/gold/` (gold labeler and selection tools) |
 | `tests/` | Unit tests for the pipelines and the download/setup scripts |
 | `data/` | Documentation and the human-verified NER evaluation sets; raw and processed data are git-ignored ([data/README.md](data/README.md)) |
-| `res/` | Figures used by the report and deck, benchmark logs, NER annotator experiment results |
+| `res/` | Figures used by the report and deck, README screenshots (`res/screenshots/`), benchmark logs, NER annotator experiment results |
 | `setup.sh`, `run-app.sh`, `run-pipeline.sh`, `download-models.sh`, `upload-models.sh` | Environment setup, app launch, pipeline driver, model download (Google Drive) and the optional S3 experiment store |
 
 ## Launch ClearanceIQ
