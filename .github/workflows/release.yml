@@ -46,7 +46,10 @@ jobs:
         with:
           tag_name: v${{ steps.version.outputs.version }}
           name: ClearanceIQ v${{ steps.version.outputs.version }}
-          body: Standalone desktop builds for Windows, macOS, and Linux. No Python install required; model artifacts are bundled in.
+          body: >-
+            Standalone desktop builds for Windows, macOS, and Linux. No Python install required; model
+            artifacts are bundled in. Windows: run ClearanceIQ-Setup.exe for a normal installer (pick your
+            own folder, Start Menu entry, uninstaller), or unzip ClearanceIQ-windows.zip to run portably.
           draft: true
           prerelease: false
 
@@ -74,18 +77,29 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Install ffmpeg (Linux) # optional: lets the app decode m4a/mp3 uploads; the bundled demo samples are wav and don't need it
-        if: matrix.platform == 'ubuntu-latest'
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg
-
       - name: Install app + build dependencies
         run: pip install -r requirements-app.txt pyinstaller gdown
 
       - name: Fetch model bundle
         run: ./download-models.sh --profile cpu
 
+      # Best-effort (see the script): lets the app decode m4a/mp3 uploads. The bundled demo samples are wav and
+      # don't need it, and the app degrades gracefully (a clear in-app message, no crash) if this step skips itself.
+      - name: Fetch static ffmpeg
+        run: ./scripts/fetch_static_ffmpeg.sh
+
       - name: Build with PyInstaller
         run: pyinstaller clearanceiq.spec
+
+      - name: Install Inno Setup (Windows)
+        if: matrix.platform == 'windows-latest'
+        run: choco install -y innosetup
+
+      # Traditional wizard installer (clearanceiq.iss): the user picks the install folder, gets a Start
+      # Menu entry and an uninstaller, instead of unzipping a portable folder themselves.
+      - name: Build Windows installer
+        if: matrix.platform == 'windows-latest'
+        run: iscc "/DAppVersion=${{ needs.create-release.outputs.version }}" clearanceiq.iss
 
       - name: Package archive (zip)
         if: matrix.platform == 'windows-latest'
@@ -101,3 +115,11 @@ jobs:
           tag_name: v${{ needs.create-release.outputs.version }}
           draft: true
           files: ${{ matrix.asset_name }}.*
+
+      - name: Upload Windows installer
+        if: matrix.platform == 'windows-latest'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.create-release.outputs.version }}
+          draft: true
+          files: installer-output/ClearanceIQ-Setup.exe

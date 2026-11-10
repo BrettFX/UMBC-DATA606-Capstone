@@ -8,6 +8,7 @@ Not used in development -- for that, use ./run-app.sh or `streamlit run app/main
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -18,8 +19,19 @@ def _bundle_root() -> Path:
     return Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
 
 
+def _expose_bundled_ffmpeg(root: Path) -> None:
+    # scripts/fetch_static_ffmpeg.sh + clearanceiq.spec put a static ffmpeg here when one was fetched at
+    # build time; putting its folder on PATH is all app/services/audio_prep.py needs (it looks ffmpeg up
+    # with shutil.which). A build without it leaves PATH untouched, and that lookup -- and the app -- just
+    # falls back to its existing "m4a/mp3 uploads are disabled" message instead of failing.
+    ffmpeg_dir = root / "ffmpeg"
+    if ffmpeg_dir.is_dir():
+        os.environ["PATH"] = str(ffmpeg_dir) + os.pathsep + os.environ.get("PATH", "")
+
+
 def main() -> None:
     root = _bundle_root()
+    _expose_bundled_ffmpeg(root)
     sys.path.insert(0, str(root))
     sys.path.insert(0, str(root / "src"))
 

@@ -28,6 +28,13 @@ if (REPO_ROOT / "models").is_dir():
     datas.append((str(REPO_ROOT / "models"), "models"))
 
 binaries = []
+# vendor/ffmpeg/ is produced by ./scripts/fetch_static_ffmpeg.sh; bundled only if present (same reasoning as
+# models/ above) -- without it the frozen app still runs, just with m4a/mp3 uploads disabled (audio_prep.py
+# already degrades gracefully when ffmpeg isn't on PATH, which is exactly the case this leaves it in).
+_ffmpeg_dir = REPO_ROOT / "vendor" / "ffmpeg"
+if _ffmpeg_dir.is_dir():
+    binaries += [(str(f), "ffmpeg") for f in _ffmpeg_dir.iterdir() if f.is_file()]
+
 hiddenimports = []
 # These packages load plugins, language data or native backends dynamically, which PyInstaller's static
 # import scan misses -- collect_all grabs their data files, binaries and submodules up front instead of
