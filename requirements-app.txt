@@ -1,0 +1,14 @@
+# Runtime dependencies for the standalone ClearanceIQ build only (scripts/launch_app.py + clearanceiq.spec).
+# This is deliberately a subset of requirements.txt: no torch, transformers, datasets, accelerate, bitsandbytes,
+# peft or kokoro -- those are training/annotation-time (or, for kokoro, an optional extra the app already
+# degrades without; see app/services/speech.py). Keeping this list lean keeps the frozen app's size and
+# PyInstaller's hidden-import surface down. Versions are pinned to match requirements.txt.
+numpy==2.5.3
+librosa==1.0.0
+soundfile==0.14.0
+pydantic==2.13.4
+spacy==3.8.9
+faster-whisper==1.2.1
+streamlit==1.66.0
+plotly==7.1.0
+anthropic==1.14.0  # optional plain-English explanations (bring-your-own API key); harmless to bundle, pure Python

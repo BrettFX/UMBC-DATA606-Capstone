@@ -1,0 +1,103 @@
+name: Build Standalone ClearanceIQ
+# Mirrors the Trackwise project's release shape: push to prod -> draft a GitHub release, build one
+# archive per OS in a matrix, attach them to that release. Bump VERSION before pushing to prod to
+# trigger a new release; pushing without a bump is a no-op (see "Guard against unchanged version").
+
+on:
+  push:
+    branches: [prod]
+  workflow_dispatch:
+
+defaults:
+  run:
+    shell: bash  # also makes Git Bash the default on windows-latest, since every step below is a bash script
+
+env:
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  create-release:
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read version
+        id: version
+        run: echo "version=$(cat VERSION | tr -d '[:space:]')" >> "$GITHUB_OUTPUT"
+
+      - name: Guard against unchanged version
+        run: |
+          LATEST_TAG=$(curl -sL "https://api.github.com/repos/BrettFX/UMBC-DATA606-Capstone/releases/latest" \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" | \
+            python3 -c "import sys,json; r=json.load(sys.stdin); print(r.get('tag_name','none'))")
+          CURRENT="v${{ steps.version.outputs.version }}"
+          if [ "$LATEST_TAG" = "$CURRENT" ]; then
+            echo "ERROR: Version $CURRENT matches the already-published release. Bump VERSION before pushing to prod." >&2
+            exit 1
+          fi
+          echo "Version check passed: $LATEST_TAG -> $CURRENT"
+
+      - name: Create draft release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: ClearanceIQ v${{ steps.version.outputs.version }}
+          body: Standalone desktop builds for Windows, macOS, and Linux. No Python install required; model artifacts are bundled in.
+          draft: true
+          prerelease: false
+
+  build:
+    needs: create-release
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: ubuntu-latest
+            asset_name: ClearanceIQ-linux
+          - platform: windows-latest
+            asset_name: ClearanceIQ-windows
+          - platform: macos-latest
+            asset_name: ClearanceIQ-macos
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install ffmpeg (Linux) # optional: lets the app decode m4a/mp3 uploads; the bundled demo samples are wav and don't need it
+        if: matrix.platform == 'ubuntu-latest'
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Install app + build dependencies
+        run: pip install -r requirements-app.txt pyinstaller gdown
+
+      - name: Fetch model bundle
+        run: ./download-models.sh --profile cpu
+
+      - name: Build with PyInstaller
+        run: pyinstaller clearanceiq.spec
+
+      - name: Package archive (zip)
+        if: matrix.platform == 'windows-latest'
+        run: cd dist && 7z a -tzip "../${{ matrix.asset_name }}.zip" ClearanceIQ
+
+      - name: Package archive (tar.gz)
+        if: matrix.platform != 'windows-latest'
+        run: cd dist && tar -czf "../${{ matrix.asset_name }}.tar.gz" ClearanceIQ
+
+      - name: Upload release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.create-release.outputs.version }}
+          draft: true
+          files: ${{ matrix.asset_name }}.*
