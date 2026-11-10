@@ -15,7 +15,7 @@ from pathlib import Path
 
 from PyInstaller.utils.hooks import collect_all
 
-REPO_ROOT = Path(__file__).resolve().parent
+REPO_ROOT = Path(SPECPATH).resolve()  # PyInstaller exec()s this file, so __file__ isn't defined here; it injects SPECPATH instead
 
 datas = [
     (str(REPO_ROOT / "app"), "app"),
