@@ -99,6 +99,10 @@ jobs:
       # Menu entry and an uninstaller, instead of unzipping a portable folder themselves.
       - name: Build Windows installer
         if: matrix.platform == 'windows-latest'
+        # Git Bash (MSYS) auto-converts any argument that looks like a Unix path, and "/DAppVersion=..." matches that
+        # pattern -- it gets mangled before iscc.exe sees it. MSYS2_ARG_CONV_EXCL=* turns that conversion off.
+        env:
+          MSYS2_ARG_CONV_EXCL: "*"
         run: iscc "/DAppVersion=${{ needs.create-release.outputs.version }}" clearanceiq.iss
 
       - name: Package archive (zip)
