@@ -67,3 +67,6 @@ res/logs/
 # --- ClearanceIQ e2e test scratch screenshots (regenerated on every run; curated ones live in app/docs/screenshots/) ---
 app/tests/e2e/shots/
 .pytest_cache/
+
+# Includes video data so it grew too large to track with git. Can find this in Google Drive instead
+docs/Allen_DATA_606_Capstone_Video.pptx
