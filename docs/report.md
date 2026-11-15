@@ -12,7 +12,7 @@
 | **GitHub Repository** | https://github.com/BrettFX/UMBC-DATA606-Capstone |
 | **LinkedIn** | https://linkedin.com/in/brett-allen-586ba4121 |
 | **PowerPoint Presentations** | [Final Presentation](./Allen_DATA_606_Capstone_Final.pptx) · [Progress Update](./Allen_DATA_606_Capstone_Progress_Update.pptx) · [Proposal](./Allen_DATA_606_Capstone_Proposal.pptx) |
-| **YouTube Channel** | https://www.youtube.com/@brettallen2199 |
+| **YouTube Video** | https://www.youtube.com/watch?v=6ew7fuLz4DI |
 
 ---
 
@@ -138,7 +138,7 @@ Two aviation speech datasets were acquired, joined, and inspected for this resea
 
 After combining the two datasets and running data-quality checks, they provide **17,681 utterances** (13,956 train / 1,816 validation / 1,909 test) across roughly **17.9 hours** of ATC audio. `DataIngestPipeline` (`src/preprocessing/ingest.py`) joins them, resamples all audio to a common 16kHz sample rate, derives utterance-level acoustic and text features, and runs auditable data-quality checks; see Section 4 for the full cleaning/feature-engineering methodology and findings.
 
-> **NOTE:** The proposal-stage EDA ([notebooks/proposal_eda.ipynb](../notebooks/proposal_eda.ipynb)) used **ATCO2-ASR** ([`jlvdoorn/atco2-asr`](https://huggingface.co/datasets/jlvdoorn/atco2-asr); jlvdoorn, n.d.-a; 559 utterances) as the real-ATC-audio source. During the comprehensive EDA phase, a larger real-ATC alternative was found (**ATC-ASR-Dataset**), but its dataset card revealed it's built in part from "the ATCO2 1-Hour Test Subset," the same public release `jlvdoorn/atco2-asr` wraps. Running both would have duplicated/overlapped recordings across two "sources" that are really the same underlying audio and could have leaked the same utterance into both a training split (via `atco2-asr`) and a test split (via `atc-asr-dataset`). Therefore, ATCO2-ASR was replaced by ATC-ASR-Dataset rather than run alongside it. The same real ATC audio role is present in the project with ~9x more data (8,122 vs. 559 utterances) and it comes with its own train/validation/test split (ATCO2-ASR only had train/validation). ATCO2-ASR's schema and structure remain documented in [data_dictionary_atco2-asr.csv](data_dictionary_atco2-asr.csv) as a historical record of this decision.
+> **NOTE:** The proposal-stage EDA ([notebooks/proposal_eda.ipynb](../notebooks/proposal_eda.ipynb)) used **ATCO2-ASR** ([`jlvdoorn/atco2-asr`](https://huggingface.co/datasets/jlvdoorn/atco2-asr); jlvdoorn, n.d.-a; 559 utterances) as the real-ATC-audio source. During the comprehensive EDA phase, a larger real-ATC alternative was found (**ATC-ASR-Dataset**), but its dataset card revealed it's built in part from "the ATCO2 1-Hour Test Subset," the same public release `jlvdoorn/atco2-asr` wraps. Running both would have duplicated/overlapped recordings across two "sources" that are really the same underlying audio and could have leaked the same utterance into both a training split (via `atco2-asr`) and a test split (via `atc-asr-dataset`). Therefore, ATCO2-ASR was replaced by ATC-ASR-Dataset rather than run alongside it. The same real ATC audio role is present in the project with ~14.5x more data (8,122 vs. 559 utterances) and it comes with its own train/validation/test split (ATCO2-ASR only had train/validation). ATCO2-ASR's schema and structure remain documented in [data_dictionary_atco2-asr.csv](data_dictionary_atco2-asr.csv) as a historical record of this decision.
 >
 
 ---
@@ -166,6 +166,7 @@ ATC-ASR-Dataset is a real air-traffic-control speech corpus combining the UWB AT
 | Number of rows / utterances | 8,122 (6,497 train / 812 validation / 813 test) |
 | Number of columns | 3 raw on Hugging Face (`id`, `audio`, `text`); 27 total after `DataIngestPipeline` (see Section 3.5) |
 | Number of audio files | 8,122 |
+| Size on disk | ~848 MB (Hugging Face dataset card; parquet, 16 kHz) |
 | Duration | mean 3.28s per utterance, std 1.73s, range 0.33-15.27s (~7.4 hours total) |
 | Audio format | WAV, mono |
 | Sample rate | 16,000 Hz (native; matches this project's target rate) |
@@ -445,7 +446,7 @@ Reusable infrastructure was built so that data curation, model training, evaluat
 
 - **`scripts/run_ingest.py`**: a standalone CLI wrapper around `DataIngestPipeline` (the same pipeline documented in Section 3.5), with `--force` (recompute from scratch), `--num-proc` (parallelize feature derivation), `--purge-raw` (delete each source's raw Hugging Face download cache once `data/processed/` exists, to reclaim disk space), `--purge-only`, and `--log-level`. This avoids the EDA notebook's much larger memory footprint (plots, audio-playback widgets, word clouds all sharing one kernel with the pipeline's own data), which matters on machines with limited RAM.
 - **`run-pipeline.sh`**: an interactive driver script that orchestrates every stage of the pipeline (data ingest, NER annotation, curation and training, ASR training, and model download/upload). It asks, per stage, whether to run it and what arguments to pass.
-- **Standalone ASR and NER pipelines** (`scripts/run_asr_train.py`, `run_ner_annotate.py`, `run_ner_curate.py`, `run_ner_train.py`; shared code in `src/asr/` and `src/ner/`): resumable, chunked runs with progress files and a monitoring dashboard, covered by CPU-only tests (54 passing).
+- **Standalone ASR and NER pipelines** (`scripts/run_asr_train.py`, `run_ner_annotate.py`, `run_ner_curate.py`, `run_ner_train.py`; shared code in `src/asr/` and `src/ner/`): resumable, chunked runs with progress files and a monitoring dashboard, covered by CPU-only tests (89 passing in `tests/`, plus 33 app tests in `app/tests/`).
 - **Benchmarking and model store** (`scripts/benchmark_inference.py`, `scripts/model_store.py`, `upload-models.sh`, `download-models.sh`): latency/WER benchmarks (5.11) and an optional versioned S3 experiment store (every run of every model, with a `latest/` tag), kept for traceability while the production models ship as a Google Drive bundle (5.11, 6.4).
 - **Reproducing the long jobs.** All timings are on the 8 GB RTX 3070 Ti laptop GPU described in 5.11. The exact commands are in the root `README.md` ("Reproducing the experiments"), and every run is resumable or seeded (seed 42). Raw data and trained models are not in the repository: the ingest script re-downloads the corpora (`data/README.md` has sources and licensing), `./setup.sh` downloads the production models from the Google Drive bundle, and the saved results and other runs live in the optional S3 experiment store. Every Hugging Face dataset and base model is pinned to the commit the results were produced with (`src/hf_revisions.py`), so an upstream change cannot silently alter the splits or baselines.
 
@@ -558,7 +559,7 @@ The prototype in 5.4 fine-tuned on 1,000 of the 13,956 training rows and was eva
 **Engineering findings worth recording.**
 
 - *LoRA batch size.* At a per-device batch of 4, medium.en + LoRA took 114 seconds per optimizer step as the driver spilled GPU memory into system RAM. A per-device batch of 2 with 16 accumulation steps (the same effective batch of 32) ran at 11 seconds per step with a 7.1 GB peak, a tenfold difference caused by memory pressure rather than computation. This is the same failure mode as the small-model finding in 5.4.
-- *Resumable training.* Long runs resume from the newest checkpoint. The repository pins `torch` 2.5.1, whose restricted `torch.load` cannot read Trainer optimizer and RNG state under `transformers` 5, so the pipeline lifts that guard only while resuming from checkpoints that the same process wrote into its own output folder (verified by a CPU test that resumes training mid-run).
+- *Resumable training.* Long runs resume from the newest checkpoint. Under `transformers` 5, torch older than 2.6 (such as 2.5.1) cannot `torch.load` Trainer optimizer and RNG state, so the pipeline lifts that guard only while resuming from checkpoints that the same process wrote into its own output folder (verified by a CPU test that resumes training mid-run). The repository now pins `torch` 2.7.1, where the guard is no longer needed.
 - *Resource guard.* The training CLI refuses to start while another job holds the GPU, since a collision would crash both.
 
 ### Results
