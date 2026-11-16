@@ -11,7 +11,7 @@ Streamlit prototype that runs on a laptop CPU.
 
 | Deliverable | Where |
 |---|---|
-| Presentation video (YouTube) | [https://www.youtube.com/watch?v=6ew7fuLz4DI](https://www.youtube.com/watch?v=6ew7fuLz4DI) |
+| Presentation video (YouTube) | [https://www.youtube.com/watch?v=n_NiYoq9lnw](https://www.youtube.com/watch?v=n_NiYoq9lnw) |
 | Final report | [docs/report.md](docs/report.md) |
 | Final presentation | [docs/Allen_DATA_606_Capstone_Final.pptx](docs/Allen_DATA_606_Capstone_Final.pptx) (earlier decks: [Progress Update](docs/Allen_DATA_606_Capstone_Progress_Update.pptx), [Proposal](docs/Allen_DATA_606_Capstone_Proposal.pptx)) |
 | Notebooks | [notebooks/](notebooks/README.md): proposal EDA, comprehensive EDA, machine learning |

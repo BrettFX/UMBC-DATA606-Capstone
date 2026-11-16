@@ -12,7 +12,7 @@
 | **GitHub Repository** | https://github.com/BrettFX/UMBC-DATA606-Capstone |
 | **LinkedIn** | https://linkedin.com/in/brett-allen-586ba4121 |
 | **PowerPoint Presentations** | [Final Presentation](./Allen_DATA_606_Capstone_Final.pptx) · [Progress Update](./Allen_DATA_606_Capstone_Progress_Update.pptx) · [Proposal](./Allen_DATA_606_Capstone_Proposal.pptx) |
-| **YouTube Video** | https://www.youtube.com/watch?v=6ew7fuLz4DI |
+| **YouTube Video** | https://www.youtube.com/watch?v=n_NiYoq9lnw |
 
 ---
 
