@@ -34,7 +34,7 @@ small evaluation sets, and a small spaCy student is trained on the curated label
 
 ## Headline results
 
-Full 1,909-utterance test split, each model scored once (details, confidence intervals and caveats in the report, Sections 5 and 7).
+Full 1,909-utterance test split, each model scored once (see the report, Sections 5 and 7, for details, confidence intervals and caveats).
 
 | Question | Result |
 |---|---|
@@ -150,7 +150,8 @@ See `python scripts/run_ingest.py --help` for all options.
 ## Reproducing the experiments
 
 All experiments use the `data-science` conda environment unless noted. Seeds (42 by default) and the session-grouped split are fixed in
-code, so reruns reproduce the splits; fine-tuned model scores vary by a few tenths of a point from GPU non-determinism (report, Section 5.4).
+code, so reruns reproduce the splits. Fine-tuned model scores do vary by a few tenths of a point from GPU non-determinism (see the report,
+Section 5.4).
 
 1. **Data.** Raw data is not in the repo. `python scripts/run_ingest.py` downloads both corpora from Hugging Face, resamples, derives
    features, runs the data-quality checks and writes `data/processed/utterances.parquet` (see [data/README.md](data/README.md) for
@@ -176,10 +177,10 @@ python -m pytest tests app/tests        # pipelines, download and setup scripts,
 
 ## Limitations
 
-Two English corpora with no accent or speaker metadata, about 7.4 hours of real audio from limited airspace; NER evaluation sets of
-95 to 100 utterances; models trained once; latency measured on one laptop CPU; and recognition errors flow straight into entity
-extraction (the NER cannot detect a misheard digit). ClearanceIQ has not been tested with controllers or pilots. See the report,
-Section 7.3.
+Two English corpora with no accent or speaker metadata, and about 7.4 hours of real audio from limited airspace. NER evaluation sets
+range from 95 to 100 utterances, and models were trained only once. Latency was measured on a single laptop CPU, and recognition
+errors flow straight into entity extraction (the NER cannot detect a misheard digit). ClearanceIQ has not been tested with
+controllers or pilots; see the report, Section 7.3, for the full list.
 
 ## Getting the trained models
 
